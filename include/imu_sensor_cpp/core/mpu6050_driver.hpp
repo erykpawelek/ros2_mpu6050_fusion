@@ -17,6 +17,9 @@ namespace mpu6050cust_driver
 {
     template <typename I2C_Interface>
 
+    /**
+     * @brief MPU6050 driver class.
+     */
     class MPU6050CustomDriver
     {
     public: 
@@ -497,6 +500,9 @@ namespace mpu6050cust_driver
 
     };
 
+    /**
+     * @brief Wrapper platform class
+     */
     class LinuxI2C 
     {
     public: 
@@ -563,5 +569,7 @@ namespace mpu6050cust_driver
         int file_identyficator_;
 
     };
+
+
 }
 #endif //MPU6050_DRIVER_HPP

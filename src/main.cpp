@@ -1,7 +1,9 @@
-#include "imu_sensor_cpp/mpu6050_driver.hpp"
+
 #include <stdio.h>
 #include <stdexcept>
 #include <unistd.h>
+
+#include <imu_sensor_cpp/core/mpu6050_driver.hpp>
 
 int main()
 {   
