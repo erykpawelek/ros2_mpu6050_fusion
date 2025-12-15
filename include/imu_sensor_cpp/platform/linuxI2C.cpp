@@ -9,6 +9,8 @@ extern "C" {
 #include <unistd.h>
 #include <stdexcept>
 #include <cstdint>
+#include <cerrno>
+#include <cstring>
 
 #include "imu_sensor_cpp/core/mpu6050_driver.hpp"
 
@@ -35,7 +37,13 @@ namespace mpu6050cust_driver
     void LinuxI2C::writeRegister(uint8_t dev_addr, uint8_t register_addr, uint8_t value ){
         // Choosing direct I2C bus addres in file thet we operate with
         if (ioctl(file_identyficator_, I2C_SLAVE, dev_addr) < 0){
-            throw std::runtime_error("Unable to connect to specified address");
+            //throw std::runtime_error("Unable to connect to specified address");
+            char err_msg[200];
+            // Wypisujemy adres, numer błędu i jego tekstowy opis
+            snprintf(err_msg, 199, "IOCTL Fail! Addr: 0x%02X, Errno: %d (%s)", 
+            dev_addr, errno, strerror(errno));
+            throw std::runtime_error(err_msg);
+
         }else{
             // Writing single register byte value using SMBUS protocol.
             int feedback = i2c_smbus_write_byte_data(file_identyficator_, register_addr, value);
@@ -90,7 +98,3 @@ namespace mpu6050cust_driver
         }
     }
 }
-    
-
-
-

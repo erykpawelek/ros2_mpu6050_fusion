@@ -7,11 +7,44 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+
+add_library(imu_hardware_lib include/imu_sensor_cpp/platform/linuxI2C.cpp)
+
+target_include_directories(imu_hardware_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+add_executable(imu_node
+  src/imu_node.cpp
+  src/main.cpp)
+
+target_link_libraries(
+  imu_node 
+  imu_hardware_lib
+  i2c
+  )
+
+ament_target_dependencies(imu_node
+  rclcpp
+  rclcpp_lifecycle
+  sensor_msgs)
+
+install( TARGETS
+  imu_hardware_lib
+  imu_node
+  DESTINATION lib/${PROJECT_NAME})
+
+install(DIRECTORY include/
+  DESTINATION include)
+
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -1,34 +1,30 @@
+#include "rclcpp/rclcpp.hpp"
+#include "imu_sensor_cpp/platform/imu_node.hpp"
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
 
-#include <stdio.h>
-#include <stdexcept>
-#include <unistd.h>
+int main(int argc, char ** argv)
+{
+   rclcpp::init(argc, argv);
 
-#include <imu_sensor_cpp/core/mpu6050_driver.hpp>
+    // 2. Tworzenie węzła
+    // Używamy make_shared, aby mieć shared_ptr, który jest potrzebny do spinowania
+    auto imu_node = std::make_shared<imu_sensor_cpp::ImuNode>("imu_node", rclcpp::NodeOptions());
 
-int main()
-{   
-    try{
+    // 3. AUTOMATYCZNA KONFIGURACJA
+    // Wymuszamy przejście do stanu Inactive
+    RCLCPP_INFO(rclcpp::get_logger("main"), "Attempting to configure...");
+    imu_node->configure(); 
 
-        mpu6050cust_driver::LinuxI2C i2c_interface(1); 
-        auto mpu6050 = mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>(
-            i2c_interface,
-            0x68,
-            mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::DLPF_94_BAND,
-            mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::GYRO_RANGE_250,
-            mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ACCEL_RANGE_4);
-       
-        mpu6050.wakeUp();
-        while (1){
-        auto data = mpu6050.getAllData(false);
-        printf("Accelerations:\n X: %f,  Y: %f,  Z: %f\n", data.accel_x, data.accel_y, data.accel_z);
-        printf("Gyroscope:    \n X: %f,  Y: %f,  Z: %f\n", data.gyro_x, data.gyro_y, data.gyro_z);
-        printf("Temperature: %f\n", data.temperature);
-        usleep(100000);
-        }
-    }
-    catch (const std::exception& e) {
-        printf("Error: %s\n", e.what());
-        return -1; 
-    }
+    // 4. AUTOMATYCZNA AKTYWACJA
+    // Wymuszamy przejście do stanu Active (teraz zaczną lecieć dane!)
+    RCLCPP_INFO(rclcpp::get_logger("main"), "Attempting to activate...");
+    imu_node->activate();
+
+    // 5. Uruchomienie pętli (Spin)
+    // Uwaga: LifecycleNode wymaga pobrania "bazy" do spina
+    rclcpp::spin(imu_node->get_node_base_interface());
+
+    // 6. Sprzątanie
+    rclcpp::shutdown();
     return 0;
 }
