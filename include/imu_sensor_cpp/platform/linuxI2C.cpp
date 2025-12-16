@@ -34,12 +34,19 @@ namespace mpu6050cust_driver
         close(file_identyficator_);
     }
 
+    LinuxI2C::LinuxI2C(LinuxI2C&& other) noexcept {
+        this->file_identyficator_ = other.file_identyficator_;
+        this->adapter_nr_ = other.adapter_nr_;
+
+        other.file_identyficator_ = -1; 
+    }
+
     void LinuxI2C::writeRegister(uint8_t dev_addr, uint8_t register_addr, uint8_t value ){
         // Choosing direct I2C bus addres in file thet we operate with
         if (ioctl(file_identyficator_, I2C_SLAVE, dev_addr) < 0){
             //throw std::runtime_error("Unable to connect to specified address");
+            //debuging
             char err_msg[200];
-            // Wypisujemy adres, numer błędu i jego tekstowy opis
             snprintf(err_msg, 199, "IOCTL Fail! Addr: 0x%02X, Errno: %d (%s)", 
             dev_addr, errno, strerror(errno));
             throw std::runtime_error(err_msg);
@@ -56,7 +63,12 @@ namespace mpu6050cust_driver
     uint8_t LinuxI2C::readRegister(uint8_t dev_addr, uint8_t register_addr){
         // Choosing direct I2C bus addres in file thet we operate with
         if (ioctl(file_identyficator_, I2C_SLAVE, dev_addr) < 0){
-            throw std::runtime_error("Unable to connect to specified address");
+            //throw std::runtime_error("Unable to connect to specified address");
+            //debuging
+            char err_msg[256];
+            snprintf(err_msg, 255, "READ IOCTL Fail! Addr: 0x%02X, Errno: %d (%s)", 
+                      dev_addr, errno, strerror(errno));
+            throw std::runtime_error(err_msg);
         }else{
             // Reading single register byte value using SMBUS protocol.
             int16_t register_value = i2c_smbus_read_byte_data(file_identyficator_, register_addr);

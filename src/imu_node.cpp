@@ -15,7 +15,7 @@ using namespace imu_sensor_cpp;
 
 ImuNode::ImuNode(const std::string & node_name, const rclcpp::NodeOptions & options)
 :   
-rclcpp_lifecycle::LifecycleNode("imu_node", options),
+rclcpp_lifecycle::LifecycleNode(node_name, options),
 qos_policy_(rclcpp::QoS(1).best_effort().durability_volatile())
 {
 }
@@ -61,9 +61,15 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNod
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNode::on_deactivate(
     const rclcpp_lifecycle::State &)
-{
-    imu_publisher_->on_deactivate();
-    timer_->reset();
+{   
+    try{
+        imu_publisher_->on_deactivate();
+        timer_->reset();
+    } catch(const std::exception & e){
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Deactivation error: " << e.what());
+        return CallbackReturn::FAILURE;
+    }
+    return CallbackReturn::SUCCESS;
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNode::on_cleanup(

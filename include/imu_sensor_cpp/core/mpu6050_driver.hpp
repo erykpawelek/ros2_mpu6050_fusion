@@ -501,7 +501,7 @@ namespace mpu6050cust_driver
     };
 
     /**
-     * @brief Wrapper platform class
+     * @brief Interface calss for handling I2C comunication.
      */
     class LinuxI2C 
     {
@@ -515,10 +515,36 @@ namespace mpu6050cust_driver
         LinuxI2C(int adapter_nr);
 
         /**
+         * @brief LinuxI2C move constructor.
+         * Transfers the ownership of the file_descriptor_ from the source object to the new instance.
+         * This prevents the file_descriptor_ from being close when temporary source object is destroyed.
+         * @param other The r-value reference to the source LinuxI2C object.
+         * After the move, the source object's file_descriptor_ is set to -1 to indicate that it no longer owns the resource.
+         * @note This constructor is marked noexcept to indicate that it does not throw exceptions.
+         */
+        LinuxI2C(LinuxI2C&& other) noexcept;
+
+        /**
+        * @brief Deleted copy constructor.
+        * * Copying the driver instance is strictly prohibited to avoid duplicating the file descriptor.
+        * Multiple objects managing the same file descriptor would lead to premature closing of the resource (RAII violation).
+        */
+        LinuxI2C(const LinuxI2C&) = delete;
+
+        /**
          * @brief LinuxI2C class destructor.
          * Closes the file handle to the system I2C bus opened in the constructor.
          */
         ~LinuxI2C();
+
+        /**
+        * @brief Deleted copy assignment operator.
+        * * Assignment via copying is prohibited for the same reasons as the copy constructor.
+        * Use move semantics (std::move) if you need to transfer the driver instance.
+        */
+        LinuxI2C& operator=(const LinuxI2C&) = delete;
+
+        
 
         /**
          * @brief Writes one byte of data into defined register.
