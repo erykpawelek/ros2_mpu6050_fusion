@@ -2,6 +2,7 @@
 #include <memory>
 #include <stdexcept>
 #include <chrono>
+#include <cmath>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -83,10 +84,36 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNod
 }
 
 void ImuNode::publisher_callback()
-{
+{   /** 
     auto imu_data = imu_driver_->getAllData(true);
     RCLCPP_INFO_STREAM(this->get_logger(), "Accelerations\nx: " << imu_data.accel_x << "\ty: " << imu_data.accel_y << "\tz: " << imu_data.accel_z);
     RCLCPP_INFO_STREAM(this->get_logger(), "Angilar velocities\nx: " << imu_data.gyro_x << "\ty: " << imu_data.gyro_y << "\tz: " << imu_data.gyro_z);
+    */
+}
+
+sensor_msgs::msg::Imu ImuNode::complementary_filter(
+    const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data, float alfa)
+{
+    sensor_msgs::msg::Imu imu_msg;
+
+    // Geting time delta 
+    auto current_time = this->get_clock()->now();
+    auto dt = current_time - last_time_;
+    last_time_ = current_time;
+    // Calculating euler angles
+    double roll = (alfa) *(last_roll_ + (imu_data.gyro_x * dt.seconds())) + (1.0 - alfa) * (std::atan2(imu_data.accel_y, imu_data.accel_z));
+
+    double pitch = (alfa) * (last_pitch_ + (imu_data.gyro_y * dt.seconds())) + (1.0 - alfa) * (std::atan2(-imu_data.accel_x, std::sqrt(
+        imu_data.accel_y * imu_data.accel_y + imu_data.accel_z * imu_data.accel_z)));
+
+    double yaw = last_yaw_ + (imu_data.gyro_z * dt.seconds());
+
+    last_roll_ = roll;
+    last_pitch_ = pitch;
+    last_yaw_ = yaw;
+
+
+    return imu_msg;
 }
 
 

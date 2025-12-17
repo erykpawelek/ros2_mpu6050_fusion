@@ -34,6 +34,8 @@ namespace imu_sensor_cpp
 
         void publisher_callback();
 
+        sensor_msgs::msg::Imu complementary_filter(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data, float alfa);
+
     private:
     rclcpp::QoS qos_policy_;
     std::unique_ptr<mpu6050cust_driver::LinuxI2C> i2c_interface_;
@@ -41,6 +43,11 @@ namespace imu_sensor_cpp
     rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
     rclcpp::TimerBase::SharedPtr timer_;
 
+    builtin_interfaces::msg::Time last_time_;
+    double last_roll_ = 0.0;
+    double last_pitch_ = 0.0;
+    double last_yaw_ = 0.0;
+    
     };
     
 }
