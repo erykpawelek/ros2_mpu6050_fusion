@@ -14,7 +14,7 @@ find_package(lifecycle_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
-add_library(imu_hardware_lib include/imu_sensor_cpp/platform/linuxI2C.cpp)
+add_library(imu_hardware_lib include/imu_sensor_cpp/driver_platform/linuxI2C.cpp)
 
 target_include_directories(imu_hardware_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -12,7 +12,7 @@ extern "C" {
 #include <cerrno>
 #include <cstring>
 
-#include "imu_sensor_cpp/core/mpu6050_driver.hpp"
+#include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
 
 namespace mpu6050cust_driver
 {

@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <unistd.h>
 
-#include <imu_sensor_cpp/core/mpu6050_driver.hpp>
+#include <imu_sensor_cpp/driver_core/mpu6050_driver.hpp>
 
 int main()
 {   

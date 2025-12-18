@@ -7,7 +7,7 @@
 #include <vector>
 #include <cassert>
 #include <iomanip>
-#include "imu_sensor_cpp/core/mpu6050_driver.hpp" 
+#include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp" 
 
 
 class MockI2C {

@@ -3,13 +3,15 @@
 
 #include <string>
 #include <memory>
+#include <vector>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
 #include "rclcpp/qos.hpp"
 
-#include "imu_sensor_cpp/core/mpu6050_driver.hpp"
+#include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
 
 namespace imu_sensor_cpp
 {
@@ -35,6 +37,8 @@ namespace imu_sensor_cpp
         void publisher_callback();
 
         sensor_msgs::msg::Imu complementary_filter(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data, float alfa);
+
+        geometry_msgs::msg::Quaternion euler_to_quaternion(double roll, double pitch, double yaw);
 
     private:
     rclcpp::QoS qos_policy_;
