@@ -99,40 +99,86 @@ sensor_msgs::msg::Imu ImuNode::complementary_filter(
     const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data, float alfa)
 {
     sensor_msgs::msg::Imu imu_msg;
-    float var_alfa;
+    // First iteration empty for time data initialization
+    if (first_run_){
+        last_time_ = this->get_clock()->now();
+        first_run_ = false;
+        imu_msg.header.stamp = last_time_;
+        imu_msg.header.frame_id = "imu_link";
+        imu_msg.orientation.set__w(1.0);
+        return imu_msg;
+    }
+
+    float var_alfa_x, var_alfa_y;
+    double roll, pitch, yaw;
+    double accel_roll_part;
 
     // Geting time delta 
     auto current_time = this->get_clock()->now();
     auto dt = current_time - last_time_;
     last_time_ = current_time;
 
+    // Calculating magnitude of acceleration vector, to prevent errors during large accelerations
     float magnitude = std::sqrt(imu_data.accel_x * imu_data.accel_x +
                                 imu_data.accel_y * imu_data.accel_y +
                                 imu_data.accel_z * imu_data.accel_z);
+    bool magnitude_ok = (magnitude < 1.15 && magnitude > 0.85);
 
-    if (magnitude < 1.15 && magnitude > 0.85){
-        var_alfa = alfa;
+    // Gimball lock prevention
+    bool orientation_x_ok = (imu_data.accel_x < 0.97 && imu_data.accel_x > -0.97);
+
+    if (magnitude_ok){
+        var_alfa_y = alfa;
+        if (orientation_x_ok){
+            var_alfa_x = alfa;
+            accel_roll_part = (std::atan2(imu_data.accel_y, imu_data.accel_z));
+        } else {
+            var_alfa_x = 1.0; // Gyro only
+            accel_roll_part = 0.0;
+        }
     } else {
-        var_alfa = 1.0;
+        var_alfa_x = 1.0; // Gyro only
+        var_alfa_y = 1.0; // Gyro only
+        accel_roll_part = 0.0;
     }
+    
 
-    double error = (std::atan2(imu_data.accel_y, imu_data.accel_z)) - (last_roll_ + (imu_data.gyro_x * dt.seconds()));
-    if (error > M_P)
-    // Calculating Euler angles
-    double roll = (var_alfa) *(last_roll_ + (imu_data.gyro_x * dt.seconds())) + (1.0 - var_alfa) * (std::atan2(imu_data.accel_y, imu_data.accel_z));
+    // ---- ROLL CALCULATIONS ----
+    
+    double prediction_x = last_roll_ + (imu_data.gyro_x * dt.seconds());
+    double error_x = accel_roll_part - prediction_x;
+    // Using atan2() normalization to prevent discontuinities in angle calculation when close to 180/-180 degree
+    if (error_x < -M_PI){
+        error_x = error_x + 2 * M_PI;
+    } else if (error_x > M_PI){
+        error_x = error_x - 2 * M_PI;
+    } 
+    roll = prediction_x + (1.0 - var_alfa_x) * (error_x);
 
-    double pitch = (var_alfa) * (last_pitch_ + (imu_data.gyro_y * dt.seconds())) + (1.0 - var_alfa) *
-         (std::atan2(-imu_data.accel_x, std::sqrt(imu_data.accel_y * imu_data.accel_y + imu_data.accel_z * imu_data.accel_z)));
+    // ---- PITCH CALCULATIONS ----
 
-        
+    double prediction_y = last_pitch_ + (imu_data.gyro_y * dt.seconds());
+    double error_y = (std::atan2(-imu_data.accel_x, std::sqrt(imu_data.accel_y * imu_data.accel_y +
+                                                              imu_data.accel_z * imu_data.accel_z)))
+        - prediction_y  ;
 
-    double yaw = last_yaw_ + (imu_data.gyro_z * dt.seconds());
+    if (error_y < -M_PI){
+        error_y = error_y + 2 * M_PI;
+    } else if (error_y > M_PI){
+        error_y = error_y - 2 * M_PI;
+    } 
+    pitch = prediction_y + (1.0 - var_alfa_y) * (error_y);
+
+    // ---- YAW CALCULATIONS ----
+
+    yaw = last_yaw_ + (imu_data.gyro_z * dt.seconds());
 
     // Saving last angles as calss members for safety
     last_roll_ = roll;
     last_pitch_ = pitch;
     last_yaw_ = yaw;
 
+    // Message packing
     imu_msg.orientation = euler_to_quaternion(last_roll_, last_pitch_, last_yaw_);
     imu_msg.header.stamp = current_time;
     imu_msg.header.frame_id = "imu_link";
