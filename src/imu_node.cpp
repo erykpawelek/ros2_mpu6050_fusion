@@ -91,7 +91,7 @@ void ImuNode::publisher_callback()
     RCLCPP_INFO_STREAM(this->get_logger(), "Angilar velocities\nx: " << imu_data.gyro_x << "\ty: " << imu_data.gyro_y << "\tz: " << imu_data.gyro_z);
     
 
-    sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_driver_->getAllData(true), 0.98);
+    sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_data, 0.98);
     imu_publisher_->publish(imu_msg);
 }
 
