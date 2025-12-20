@@ -89,6 +89,8 @@ namespace imu_sensor_cpp
         /** ROS timer for periodic data acquisition */
         rclcpp::TimerBase::SharedPtr timer_;
 
+        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
+
         // --- Hardware Drivers ---
         /** Linux I2C interface wrapper */
         std::unique_ptr<mpu6050cust_driver::LinuxI2C> i2c_interface_;
@@ -112,9 +114,9 @@ namespace imu_sensor_cpp
         /** Complementary filter weight (0.0 - 1.0). Higher value trusts Gyro more. */
         double param_alpha_;
         /** Minimum acceptable gravity vector length [g] for correction. */
-        double param_accel_low_g_;
+        double param_magnitude_low_threshold_;
         /** Maximum acceptable gravity vector length [g] for correction. */
-        double param_accel_high_g_;
+        double param_magnitude_high_threshold_;
         /** Threshold for Gimbal Lock detection on X-axis [g] (e.g., 0.97). */
         double param_gimbal_lock_threshold_;
     };

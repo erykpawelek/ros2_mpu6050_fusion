@@ -20,6 +20,42 @@ rclcpp_lifecycle::LifecycleNode(node_name, options),
 qos_policy_(rclcpp::QoS(1).best_effort().durability_volatile()),
 last_time_(this->get_clock()->now())
 {
+    this->declare_parameter<double>("alfa", 0.98);
+    this->declare_parameter<double>("magnitude_low_threshold", 0.85);
+    this->declare_parameter<double>("magnitude_high_threshold", 1.15);
+    this->declare_parameter<double>("gimbal_lock_threshold", 0.97);
+
+    this->get_parameter("alfa", param_alpha_);
+    this->get_parameter("magnitude_low_threshold", param_magnitude_low_threshold_);
+    this->get_parameter("magnitude_high_threshold", param_magnitude_high_threshold_);
+    this->get_parameter("gimbal_lock_threshold", param_gimbal_lock_threshold_);
+
+    param_callback_handle_ = this->add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter> & parameters)
+        {   
+            rcl_interfaces::msg::SetParametersResult result;
+            result.successful = true;
+
+            for (const auto & param : parameters){
+                if (param.get_name() == "alfa"){
+                    double val = param.as_double();
+                    if (val < 0.0 || val > 1.0) {
+                        result.successful = false;
+                        result.reason = "Alfa must be between 0.0 and 1.0";
+                    }
+                    return result; 
+                    param_alpha_ = val;
+                } else if (param.get_name() == "magnitude_low_threshold"){
+                    param_magnitude_low_threshold_ = param.as_double();
+                } else if (param.get_name() == "magnitude_high_threshold"){
+                    param_magnitude_high_threshold_ = param.as_double();
+                } else if (param.get_name() == "gimbal_lock_threshold"){
+                    param_gimbal_lock_threshold_ = param.as_double();
+                }
+            }
+            return result;
+        }
+    );
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNode::on_configure(
@@ -87,11 +123,15 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNod
 void ImuNode::publisher_callback()
 {   
     auto imu_data = imu_driver_->getAllData(true);
-    RCLCPP_INFO_STREAM(this->get_logger(), "Accelerations\nx: " << imu_data.accel_x << "\ty: " << imu_data.accel_y << "\tz: " << imu_data.accel_z);
-    RCLCPP_INFO_STREAM(this->get_logger(), "Angilar velocities\nx: " << imu_data.gyro_x << "\ty: " << imu_data.gyro_y << "\tz: " << imu_data.gyro_z);
-    
+    RCLCPP_INFO_THROTTLE(
+        this->get_logger(),
+        *this->get_clock(),
+        1000,
+        "\nAccelerations\nx: %.2f g\ty: %.2f g\tz: %.2f g\nAngilar velocities\nx: %.2f rad/s\ty: %.2f rad/s\tz: %.2f rad/s",
+        imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
+        imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
 
-    sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_data, 0.98);
+    sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_data, param_alpha_);
     imu_publisher_->publish(imu_msg);
 }
 
@@ -122,10 +162,10 @@ sensor_msgs::msg::Imu ImuNode::complementary_filter(
     float magnitude = std::sqrt(imu_data.accel_x * imu_data.accel_x +
                                 imu_data.accel_y * imu_data.accel_y +
                                 imu_data.accel_z * imu_data.accel_z);
-    bool magnitude_ok = (magnitude < 1.15 && magnitude > 0.85);
+    bool magnitude_ok = (magnitude < param_magnitude_high_threshold_ && magnitude > param_magnitude_low_threshold_);
 
     // Gimball lock prevention
-    bool orientation_x_ok = (imu_data.accel_x < 0.97 && imu_data.accel_x > -0.97);
+    bool orientation_x_ok = (imu_data.accel_x < param_gimbal_lock_threshold_ && imu_data.accel_x > -param_gimbal_lock_threshold_);
 
     if (magnitude_ok){
         var_alfa_y = alfa;
