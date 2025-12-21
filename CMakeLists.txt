@@ -13,6 +13,7 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
 
 add_library(imu_hardware_lib include/imu_sensor_cpp/driver_platform/linuxI2C.cpp)
 

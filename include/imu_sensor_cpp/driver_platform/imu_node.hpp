@@ -4,6 +4,8 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <mutex>
+#include <cmath>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -19,6 +21,20 @@ namespace imu_sensor_cpp
     class ImuNode : public rclcpp_lifecycle::LifecycleNode
     {
     public:
+        /**
+        * @brief Configuration struct for Complementary Filter parameters.
+        */
+        struct ComplementaryFilterConfig {
+            /** Complementary filter weight (0.0 - 1.0). Higher value trusts Gyro more. */
+            double alpha; 
+            /** Minimum acceptable gravity vector length [g] for correction. */
+            double magnitude_low_threshold; 
+            /** Maximum acceptable gravity vector length [g] for correction. */
+            double magnitude_high_threshold;
+            /** Threshold for Gimbal Lock detection on X-axis [g] (e.g., 0.97). */
+            double gimbal_lock_threshold; 
+        };   
+        
         /**
          * @brief ImuNode class constructor.
          * @param node_name Name of the node.
@@ -68,7 +84,8 @@ namespace imu_sensor_cpp
          * @param alfa Filter coefficient (weight for gyroscope integration).
          * @return sensor_msgs::msg::Imu message with estimated orientation (Quaternion).
          */
-        sensor_msgs::msg::Imu complementary_filter(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data, float alfa);
+        sensor_msgs::msg::Imu complementary_filter(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data,
+            ImuNode::ComplementaryFilterConfig comp_filter_config_copy);
         
         /**
          * @brief Converts Euler angles to Quaternion representation.
@@ -97,11 +114,15 @@ namespace imu_sensor_cpp
         /** MPU6050 sensor driver logic */
         std::unique_ptr<mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>> imu_driver_;
 
+        //**Parameters mutex */
+        mutable std::mutex param_mutex_;
+
         // --- Internal State ---
         /** Timestamp of the previous iteration for dt calculation */
         builtin_interfaces::msg::Time last_time_;
         /** Initialization flag to skip first dt calculation */
         bool first_run_ = true;
+        
         
         /** Current Roll angle estimation [rad] */
         double last_roll_ = 0.0;
@@ -109,17 +130,14 @@ namespace imu_sensor_cpp
         double last_pitch_ = 0.0;
         /** Current Yaw angle estimation [rad] */
         double last_yaw_ = 0.0;
-
-        // --- ROS Parameters (Configurable) ---
-        /** Complementary filter weight (0.0 - 1.0). Higher value trusts Gyro more. */
-        double param_alpha_;
-        /** Minimum acceptable gravity vector length [g] for correction. */
-        double param_magnitude_low_threshold_;
-        /** Maximum acceptable gravity vector length [g] for correction. */
-        double param_magnitude_high_threshold_;
-        /** Threshold for Gimbal Lock detection on X-axis [g] (e.g., 0.97). */
-        double param_gimbal_lock_threshold_;
+        
+        // --- Parameters ---
+        /** Frame ID for IMU messages */
+        std::string frame_id_;
+        /** Flag to delete calibration data */
+        bool delete_calibration_data_;
+        /** Complementary Filter configuration parameters */
+        ComplementaryFilterConfig comp_filter_config_;
     };
-    
 }
 #endif //IMU_SENSOR_NODE_HPP

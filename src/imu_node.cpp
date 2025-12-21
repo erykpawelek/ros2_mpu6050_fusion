@@ -3,11 +3,14 @@
 #include <stdexcept>
 #include <chrono>
 #include <cmath>
+#include <mutex>
+#include <functional>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "rclcpp/qos.hpp"
+#include "lifecycle_msgs/msg/state.hpp"
 
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
 #include "imu_sensor_cpp/driver_platform/imu_node.hpp"
@@ -24,33 +27,65 @@ last_time_(this->get_clock()->now())
     this->declare_parameter<double>("magnitude_low_threshold", 0.85);
     this->declare_parameter<double>("magnitude_high_threshold", 1.15);
     this->declare_parameter<double>("gimbal_lock_threshold", 0.97);
+    this->declare_parameter<std::string>("frame_id", "imu_link");
+    this->declare_parameter<bool>("start_calibration", false);
+    this->declare_parameter<bool>("delete_calibration_data", false);
 
-    this->get_parameter("alfa", param_alpha_);
-    this->get_parameter("magnitude_low_threshold", param_magnitude_low_threshold_);
-    this->get_parameter("magnitude_high_threshold", param_magnitude_high_threshold_);
-    this->get_parameter("gimbal_lock_threshold", param_gimbal_lock_threshold_);
+    this->get_parameter("alfa", comp_filter_config_.alpha);
+    this->get_parameter("magnitude_low_threshold", comp_filter_config_.magnitude_low_threshold);
+    this->get_parameter("magnitude_high_threshold", comp_filter_config_.magnitude_high_threshold);
+    this->get_parameter("gimbal_lock_threshold", comp_filter_config_.gimbal_lock_threshold);
+    this->get_parameter("frame_id", frame_id_);
+    this->get_parameter("delete_calibration_data", delete_calibration_data_);
 
     param_callback_handle_ = this->add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter> & parameters)
         {   
             rcl_interfaces::msg::SetParametersResult result;
             result.successful = true;
+            {
+                std::lock_guard<std::mutex> lock(this->param_mutex_);
 
-            for (const auto & param : parameters){
-                if (param.get_name() == "alfa"){
-                    double val = param.as_double();
-                    if (val < 0.0 || val > 1.0) {
-                        result.successful = false;
-                        result.reason = "Alfa must be between 0.0 and 1.0";
+                for (const auto & param : parameters){
+                    if (param.get_name() == "alfa"){
+                        double val = param.as_double();
+                        if (val < 0.0 || val > 1.0) {
+                            result.successful = false;
+                            result.reason = "Alfa must be between 0.0 and 1.0";
+                            return result; 
+                        }
+                        comp_filter_config_.alpha = val;
+                    } else if (param.get_name() == "magnitude_low_threshold"){
+                        comp_filter_config_.magnitude_low_threshold = param.as_double();
+                    } else if (param.get_name() == "magnitude_high_threshold"){
+                        comp_filter_config_.magnitude_high_threshold = param.as_double();
+                    } else if (param.get_name() == "gimbal_lock_threshold"){
+                        double val = param.as_double();
+                        if (val < 0.7 || val > 1.0) {
+                            result.successful = false;
+                            result.reason = "gimbal_lock_threshold must be between 0.7 and 1.0";
+                            return result; 
+                        }
+                        comp_filter_config_.gimbal_lock_threshold = val;
+                    } else if (param.get_name() == "frame_id"){
+                        frame_id_ = param.as_string();
+                    } else if (param.get_name() == "start_calibration"){
+                        if (param.as_bool() == true){
+                            if (this->get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE){
+                                RCLCPP_WARN(this->get_logger(), "Calibration started...");
+                                imu_driver_->calibrate();
+                                RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
+                            }
+                        }
+                    } else if (param.get_name() == "delete_calibration_data"){
+                           if (param.as_bool() == true){
+                            if (this->get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE){
+                                RCLCPP_WARN(this->get_logger(), "Calibration started...");
+                                imu_driver_->delete_calibration_data();
+                                RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
+                            }
+                        }
                     }
-                    return result; 
-                    param_alpha_ = val;
-                } else if (param.get_name() == "magnitude_low_threshold"){
-                    param_magnitude_low_threshold_ = param.as_double();
-                } else if (param.get_name() == "magnitude_high_threshold"){
-                    param_magnitude_high_threshold_ = param.as_double();
-                } else if (param.get_name() == "gimbal_lock_threshold"){
-                    param_gimbal_lock_threshold_ = param.as_double();
                 }
             }
             return result;
@@ -122,6 +157,14 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNod
 
 void ImuNode::publisher_callback()
 {   
+    // Copying parameters under mutex to prevent race conditions when using multi threading Nodes.
+    ImuNode::ComplementaryFilterConfig comp_filter_config_copy;
+    {
+        std::lock_guard<std::mutex> lock(param_mutex_);
+        comp_filter_config_copy = comp_filter_config_;
+
+    }
+
     auto imu_data = imu_driver_->getAllData(true);
     RCLCPP_INFO_THROTTLE(
         this->get_logger(),
@@ -131,12 +174,14 @@ void ImuNode::publisher_callback()
         imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
         imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
 
-    sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_data, param_alpha_);
+    sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_data, comp_filter_config_copy);
+    imu_msg.header.frame_id = frame_id_;
     imu_publisher_->publish(imu_msg);
 }
 
 sensor_msgs::msg::Imu ImuNode::complementary_filter(
-    const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data, float alfa)
+    const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data,
+    ImuNode::ComplementaryFilterConfig comp_filter_config_copy)
 {
     sensor_msgs::msg::Imu imu_msg;
     // First iteration empty for time data initialization
@@ -162,15 +207,17 @@ sensor_msgs::msg::Imu ImuNode::complementary_filter(
     float magnitude = std::sqrt(imu_data.accel_x * imu_data.accel_x +
                                 imu_data.accel_y * imu_data.accel_y +
                                 imu_data.accel_z * imu_data.accel_z);
-    bool magnitude_ok = (magnitude < param_magnitude_high_threshold_ && magnitude > param_magnitude_low_threshold_);
+    bool magnitude_ok = (magnitude < comp_filter_config_copy.magnitude_high_threshold &&
+         magnitude > comp_filter_config_copy.magnitude_low_threshold);
 
     // Gimball lock prevention
-    bool orientation_x_ok = (imu_data.accel_x < param_gimbal_lock_threshold_ && imu_data.accel_x > -param_gimbal_lock_threshold_);
+    bool orientation_x_ok = (imu_data.accel_x < comp_filter_config_copy.gimbal_lock_threshold &&
+         imu_data.accel_x > -comp_filter_config_copy.gimbal_lock_threshold);
 
     if (magnitude_ok){
-        var_alfa_y = alfa;
+        var_alfa_y = comp_filter_config_copy.alpha;
         if (orientation_x_ok){
-            var_alfa_x = alfa;
+            var_alfa_x = comp_filter_config_copy.alpha;
             accel_roll_part = (std::atan2(imu_data.accel_y, imu_data.accel_z));
         } else {
             var_alfa_x = 1.0; // Gyro only
@@ -221,7 +268,6 @@ sensor_msgs::msg::Imu ImuNode::complementary_filter(
     // Message packing
     imu_msg.orientation = euler_to_quaternion(last_roll_, last_pitch_, last_yaw_);
     imu_msg.header.stamp = current_time;
-    imu_msg.header.frame_id = "imu_link";
     
     return imu_msg;
 }
