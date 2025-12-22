@@ -157,51 +157,47 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNod
 
 void ImuNode::publisher_callback()
 {   
-    // Copying parameters under mutex to prevent race conditions when using multi threading Nodes.
-    ImuNode::ComplementaryFilterConfig comp_filter_config_copy;
-    {
-        std::lock_guard<std::mutex> lock(param_mutex_);
-        comp_filter_config_copy = comp_filter_config_;
+    if (first_run_){
+        last_time_ = this->get_clock()->now();
+        first_run_ = false;
+    } else {
+        auto dt = get_dt();
 
+        // Copying parameters under mutex to prevent race conditions when using multi threading Nodes.
+        ImuNode::ComplementaryFilterConfig comp_filter_config_copy;
+        {
+            std::lock_guard<std::mutex> lock(param_mutex_);
+            comp_filter_config_copy = comp_filter_config_;
+        }
+
+        auto imu_data = imu_driver_->getAllData(true);
+
+        RCLCPP_INFO_THROTTLE(
+            this->get_logger(),
+            *this->get_clock(),
+            1000,
+            "\nAccelerations\nx: %.2f g\ty: %.2f g\tz: %.2f g\nAngilar velocities\nx: %.2f rad/s\ty: %.2f rad/s\tz: %.2f rad/s",
+            imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
+            imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
+
+        sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_data, comp_filter_config_copy, dt);
+        imu_msg.header.frame_id = frame_id_;
+        imu_publisher_->publish(imu_msg);
     }
-
-    auto imu_data = imu_driver_->getAllData(true);
-    RCLCPP_INFO_THROTTLE(
-        this->get_logger(),
-        *this->get_clock(),
-        1000,
-        "\nAccelerations\nx: %.2f g\ty: %.2f g\tz: %.2f g\nAngilar velocities\nx: %.2f rad/s\ty: %.2f rad/s\tz: %.2f rad/s",
-        imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
-        imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
-
-    sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_data, comp_filter_config_copy);
-    imu_msg.header.frame_id = frame_id_;
-    imu_publisher_->publish(imu_msg);
+    
 }
 
 sensor_msgs::msg::Imu ImuNode::complementary_filter(
     const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data,
-    ImuNode::ComplementaryFilterConfig comp_filter_config_copy)
+    ImuNode::ComplementaryFilterConfig comp_filter_config_copy,
+    rclcpp::Duration dt)
 {
     sensor_msgs::msg::Imu imu_msg;
     // First iteration empty for time data initialization
-    if (first_run_){
-        last_time_ = this->get_clock()->now();
-        first_run_ = false;
-        imu_msg.header.stamp = last_time_;
-        imu_msg.header.frame_id = "imu_link";
-        imu_msg.orientation.set__w(1.0);
-        return imu_msg;
-    }
-
+    
     float var_alfa_x, var_alfa_y;
     double roll, pitch, yaw;
     double accel_roll_part;
-
-    // Geting time delta 
-    auto current_time = this->get_clock()->now();
-    auto dt = current_time - last_time_;
-    last_time_ = current_time;
 
     // Calculating magnitude of acceleration vector, to prevent errors during large accelerations
     float magnitude = std::sqrt(imu_data.accel_x * imu_data.accel_x +
@@ -229,7 +225,6 @@ sensor_msgs::msg::Imu ImuNode::complementary_filter(
         accel_roll_part = 0.0;
     }
     
-
     // ---- ROLL CALCULATIONS ----
     
     double prediction_x = last_roll_ + (imu_data.gyro_x * dt.seconds());
@@ -267,7 +262,7 @@ sensor_msgs::msg::Imu ImuNode::complementary_filter(
 
     // Message packing
     imu_msg.orientation = euler_to_quaternion(last_roll_, last_pitch_, last_yaw_);
-    imu_msg.header.stamp = current_time;
+    imu_msg.header.stamp = last_time_;
     
     return imu_msg;
 }
@@ -292,4 +287,9 @@ geometry_msgs::msg::Quaternion ImuNode::euler_to_quaternion(double roll, double 
     return quaternion;
 }
 
-
+rclcpp::Duration ImuNode::get_dt(){
+    auto current_time = this->get_clock()->now();
+    auto dt = current_time - last_time_;
+    last_time_ = current_time;
+    return dt;
+}

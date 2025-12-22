@@ -84,8 +84,10 @@ namespace imu_sensor_cpp
          * @param alfa Filter coefficient (weight for gyroscope integration).
          * @return sensor_msgs::msg::Imu message with estimated orientation (Quaternion).
          */
-        sensor_msgs::msg::Imu complementary_filter(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data,
-            ImuNode::ComplementaryFilterConfig comp_filter_config_copy);
+        sensor_msgs::msg::Imu complementary_filter(
+            const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data,
+            ImuNode::ComplementaryFilterConfig comp_filter_config_copy,
+            rclcpp::Duration dt);
         
         /**
          * @brief Converts Euler angles to Quaternion representation.
@@ -96,6 +98,8 @@ namespace imu_sensor_cpp
          * @return geometry_msgs::msg::Quaternion
          */
         geometry_msgs::msg::Quaternion euler_to_quaternion(double roll, double pitch, double yaw);
+
+        rclcpp::Duration get_dt();
 
     private:
         // --- ROS Interfaces ---
