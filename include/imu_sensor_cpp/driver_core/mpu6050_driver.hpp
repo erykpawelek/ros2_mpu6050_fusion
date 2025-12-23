@@ -181,6 +181,13 @@ namespace mpu6050cust_driver
         wakeUp();
         float sum_accel_x = 0.0f, sum_accel_y = 0.0f, sum_accel_z = 0.0f;
         float sum_gyro_x = 0.0f,  sum_gyro_y = 0.0f,  sum_gyro_z = 0.0f;
+        // Delating old calibration data
+        offset_accel_x_ = 0.0;
+        offset_accel_y_ = 0.0;
+        offset_accel_z_ = 0.0;
+        offset_gyro_x_ = 0.0;
+        offset_gyro_y_ = 0.0;
+        offset_gyro_z_ = 0.0;
         
         // Calculating duration of one cycle
         int delay_us = 1000000 / sampling_freq; 
