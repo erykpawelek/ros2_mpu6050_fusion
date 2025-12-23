@@ -20,17 +20,17 @@ namespace imu_madgwick
 
         MadgwickFilter(double beta, Quaternion initial_pose);
 
-        void update(
+        bool update(
             const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData& imu_data,
             rclcpp::Duration dt);
-
-        Quaternion normalize(const Quaternion & data);
 
     private:
         /**Previous orientation of the IMU modlue */
         Quaternion q_previous_;
         /**Filter coefficient */
         double beta_;
+        /**Numeric error const */
+        static constexpr double EPSILON = 1e-6;
     };
 }
 #endif

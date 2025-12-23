@@ -10,7 +10,7 @@ namespace imu_madgwick
     q_previous_(initial_pose)
     {}
 
-    void MadgwickFilter::update(
+    bool MadgwickFilter::update(
         const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData& imu_data,
         rclcpp::Duration dt)
     {
@@ -18,7 +18,7 @@ namespace imu_madgwick
                                 imu_data.accel_y * imu_data.accel_y +
                                 imu_data.accel_z * imu_data.accel_z);
 
-        if (norm != 0.0){
+        if (norm > EPSILON){
             // Normalizing the gravity vector from imu to ensure it's length is 1.0 
             double norm_ax = imu_data.accel_x / norm;
             double norm_ay = imu_data.accel_y / norm;
@@ -51,7 +51,7 @@ namespace imu_madgwick
                                         grad_y * grad_y +
                                         grad_z * grad_z);
                                         
-            if (grad_norm != 0.0){
+            if (grad_norm > EPSILON){
                 double norm_grad_w = grad_w / grad_norm;
                 double norm_grad_x = grad_x / grad_norm;
                 double norm_grad_y = grad_y / grad_norm;
@@ -62,53 +62,46 @@ namespace imu_madgwick
                 double gz = imu_data.gyro_z;
 
                 // Calculating first derivative of gyroscope quaternion measurement
-                double q_prim_w = 0.5 * (-qx*gx -qy*gy - qz*gz);
-                double q_prim_x = 0.5 * (qw*gx + qy*gz - qz*gy);
-                double q_prim_y = 0.5 * (qw*gy - qx*gz + qz*gx);
-                double q_prim_z = 0.5 * (qw*gz + qx*gy - qy*gx);
+                double q_prim_w = 0.5 * (-qx*gx - qy*gy - qz*gz);
+                double q_prim_x = 0.5 * ( qw*gx + qy*gz - qz*gy);
+                double q_prim_y = 0.5 * ( qw*gy - qx*gz + qz*gx);
+                double q_prim_z = 0.5 * ( qw*gz + qx*gy - qy*gx);
 
                 double q_correction_w = q_prim_w - beta_* norm_grad_w;
                 double q_correction_x = q_prim_x - beta_* norm_grad_x;
                 double q_correction_y = q_prim_y - beta_* norm_grad_y;
                 double q_correction_z = q_prim_z - beta_* norm_grad_z;
 
+                // Integrating to get new quaternion orientation
                 Quaternion q_current;
                 q_current.w = q_previous_.w + q_correction_w * dt.seconds();
                 q_current.x = q_previous_.x + q_correction_x * dt.seconds();
                 q_current.y = q_previous_.y + q_correction_y * dt.seconds();
                 q_current.z = q_previous_.z + q_correction_z * dt.seconds();
 
-                q_current = normalize(q_current);
+                // Normalizing current quaternion
+                double current_norm = std::sqrt( q_current.w * q_current.w +
+                                            q_current.x * q_current.x +
+                                            q_current.y * q_current.y +
+                                            q_current.z * q_current.z);
+                
+                if (current_norm > EPSILON){
+                    q_current.w = q_current.w / current_norm,
+                    q_current.x = q_current.x / current_norm,
+                    q_current.y = q_current.y / current_norm,
+                    q_current.z = q_current.z / current_norm;
 
-                q_previous_ = q_current;
+                    q_previous_ = q_current;
 
+                    return true;
+                } else {
+                    return false;
+                }
             } else {
-                printf("[ERROR] Invalid normalized gradient value (=0)!");
-                return;
+                return false;
             }
         } else {
-            printf("[ERROR] Invaid imu sensor data (=0)!");
-            return;
-        }
-    }
-
-    MadgwickFilter::Quaternion MadgwickFilter::normalize(const Quaternion & data){
-        double norm = std::sqrt(data.w * data.w +
-                                data.x * data.x +
-                                data.y * data.y +
-                                data.z * data.z);
-
-        if (norm != 0.0){
-            Quaternion normalized; 
-            normalized.w = data.w / norm;
-            normalized.x = data.x / norm;
-            normalized.y = data.y / norm;
-            normalized.z = data.z / norm;
-
-            return normalized;
-        } else {
-            printf("[ERROR] Invaid quaternion data for normalization (=0)!");
-            return data;
+            return false;
         }
     }
 }
