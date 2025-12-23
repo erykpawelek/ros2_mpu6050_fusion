@@ -104,4 +104,12 @@ namespace imu_madgwick
             return false;
         }
     }
+
+    MadgwickFilter::Quaternion MadgwickFilter::get_current_orientation() const{
+        return q_previous_;
+    }
+
+    void MadgwickFilter::set_beta(double beta){
+        beta_ = beta;
+    }
 }

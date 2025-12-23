@@ -24,6 +24,11 @@ namespace imu_madgwick
             const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData& imu_data,
             rclcpp::Duration dt);
 
+        Quaternion get_current_orientation() const;
+
+        void set_beta(double beta);
+ 
+
     private:
         /**Previous orientation of the IMU modlue */
         Quaternion q_previous_;
