@@ -1,5 +1,4 @@
 #include <cmath>
-#include <string>
 
 #include "imu_sensor_cpp/algorithms/madgwick_filter.hpp"
 
@@ -12,7 +11,7 @@ namespace imu_madgwick
 
     bool MadgwickFilter::update(
         const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData& imu_data,
-        rclcpp::Duration dt)
+        double dt)
     {
         double norm = std::sqrt(imu_data.accel_x * imu_data.accel_x +
                                 imu_data.accel_y * imu_data.accel_y +
@@ -40,11 +39,11 @@ namespace imu_madgwick
             double qy = q_previous_.y;
             double qz = q_previous_.z;
 
-            double grad_w = -2.0f * qy * f_x + 2.0f * qx * f_y;
-            double grad_x =  2.0f * qz * f_x + 2.0f * qw * f_y - 4.0f * qx * f_z;
-            double grad_y = -2.0f * qw * f_x + 2.0f * qz * f_y - 4.0f * qy * f_z;
-            double grad_z =  2.0f * qx * f_x + 2.0f * qy * f_y;
-
+            double grad_w =  2.0f * qy * f_x - 2.0f * qx * f_y;           
+            double grad_x =  2.0f * qz * f_x - 2.0f * qw * f_y - 4.0f * qx * f_z; 
+            double grad_y =  2.0f * qw * f_x + 2.0f * qz * f_y - 4.0f * qy * f_z;
+            double grad_z =  2.0f * qx * f_x + 2.0f * qy * f_y;         
+             
             // Gradient normalizing to guarantee that it's magnitude is 1.0
             double grad_norm = std::sqrt(grad_w * grad_w +
                                         grad_x * grad_x + 
@@ -74,10 +73,10 @@ namespace imu_madgwick
 
                 // Integrating to get new quaternion orientation
                 Quaternion q_current;
-                q_current.w = q_previous_.w + q_correction_w * dt.seconds();
-                q_current.x = q_previous_.x + q_correction_x * dt.seconds();
-                q_current.y = q_previous_.y + q_correction_y * dt.seconds();
-                q_current.z = q_previous_.z + q_correction_z * dt.seconds();
+                q_current.w = q_previous_.w + q_correction_w * dt;
+                q_current.x = q_previous_.x + q_correction_x * dt;
+                q_current.y = q_previous_.y + q_correction_y * dt;
+                q_current.z = q_previous_.z + q_correction_z * dt;
 
                 // Normalizing current quaternion
                 double current_norm = std::sqrt( q_current.w * q_current.w +

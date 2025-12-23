@@ -2,7 +2,6 @@
 #define IMU_MADGWICK
 
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
-#include "rclcpp/rclcpp.hpp"
 
 namespace imu_madgwick
 {
@@ -18,11 +17,13 @@ namespace imu_madgwick
             double z;
         };
 
+        static constexpr Quaternion INITIAL_POSE = {1.0, 0.0, 0.0, 0.0};
+
         MadgwickFilter(double beta, Quaternion initial_pose);
 
         bool update(
             const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData& imu_data,
-            rclcpp::Duration dt);
+            double dt);
 
         Quaternion get_current_orientation() const;
 
@@ -30,10 +31,11 @@ namespace imu_madgwick
  
 
     private:
-        /**Previous orientation of the IMU modlue */
-        Quaternion q_previous_;
+
         /**Filter coefficient */
         double beta_;
+        /**Previous orientation of the IMU modlue */
+        Quaternion q_previous_;
         /**Numeric error const */
         static constexpr double EPSILON = 1e-6;
     };

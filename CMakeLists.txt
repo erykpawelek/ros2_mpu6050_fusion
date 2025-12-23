@@ -15,9 +15,16 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 
+# Creating libraries
 add_library(imu_hardware_lib include/imu_sensor_cpp/driver_platform/linuxI2C.cpp)
+add_library(madgwick_filter_lib src/algorithms/madgwick_filter.cpp)
 
+# Pointing where are heder files for specified library
 target_include_directories(imu_hardware_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_include_directories(madgwick_filter_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
@@ -25,20 +32,23 @@ target_include_directories(imu_hardware_lib PUBLIC
 add_executable(imu_node
   src/imu_node.cpp
   src/main.cpp)
-
+# Linking imu_node with other libraries
 target_link_libraries(
   imu_node 
   imu_hardware_lib
+  madgwick_filter_lib
   i2c
   )
-
+# Adding ROS2 dependencies
 ament_target_dependencies(imu_node
   rclcpp
   rclcpp_lifecycle
   sensor_msgs)
 
+# Installing package
 install( TARGETS
   imu_hardware_lib
+  madgwick_filter_lib
   imu_node
   DESTINATION lib/${PROJECT_NAME})
 

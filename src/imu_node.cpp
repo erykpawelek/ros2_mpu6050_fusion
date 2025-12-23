@@ -14,6 +14,7 @@
 
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
 #include "imu_sensor_cpp/driver_platform/imu_node.hpp"
+#include "imu_sensor_cpp/algorithms/madgwick_filter.hpp"
 
 using namespace imu_sensor_cpp;
 
@@ -21,13 +22,21 @@ ImuNode::ImuNode(const std::string & node_name, const rclcpp::NodeOptions & opti
 :   
 rclcpp_lifecycle::LifecycleNode(node_name, options),
 qos_policy_(rclcpp::QoS(1).best_effort().durability_volatile()),
-last_time_(this->get_clock()->now())
+last_time_(this->get_clock()->now()),
+madgwick_er_count_(0)
 {
+    // Complementary filter parameters
     this->declare_parameter<double>("alfa", 0.98);
     this->declare_parameter<double>("magnitude_low_threshold", 0.85);
     this->declare_parameter<double>("magnitude_high_threshold", 1.15);
     this->declare_parameter<double>("gimbal_lock_threshold", 0.97);
+    // Madgwick filter parameter
+    this->declare_parameter<double>("beta", 0.1);
+    // State machine parameter
+    this->declare_parameter<std::string>("mode", "madgwick");
+    // Publisher parameters
     this->declare_parameter<std::string>("frame_id", "imu_link");
+    // MPU6050 calibration parameters
     this->declare_parameter<bool>("start_calibration", false);
     this->declare_parameter<bool>("delete_calibration_data", false);
 
@@ -35,6 +44,8 @@ last_time_(this->get_clock()->now())
     this->get_parameter("magnitude_low_threshold", comp_filter_config_.magnitude_low_threshold);
     this->get_parameter("magnitude_high_threshold", comp_filter_config_.magnitude_high_threshold);
     this->get_parameter("gimbal_lock_threshold", comp_filter_config_.gimbal_lock_threshold);
+    this->get_parameter("beta", beta_);
+    this->get_parameter("mode", mode_);
     this->get_parameter("frame_id", frame_id_);
     this->get_parameter("delete_calibration_data", delete_calibration_data_);
 
@@ -43,47 +54,64 @@ last_time_(this->get_clock()->now())
         {   
             rcl_interfaces::msg::SetParametersResult result;
             result.successful = true;
-            {
-                std::lock_guard<std::mutex> lock(this->param_mutex_);
 
-                for (const auto & param : parameters){
-                    if (param.get_name() == "alfa"){
-                        double val = param.as_double();
-                        if (val < 0.0 || val > 1.0) {
-                            result.successful = false;
-                            result.reason = "Alfa must be between 0.0 and 1.0";
-                            return result; 
+            for (const auto & param : parameters){
+                if (param.get_name() == "alfa"){
+                    double val = param.as_double();
+                    if (val < 0.0 || val > 1.0) {
+                        result.successful = false;
+                        result.reason = "Alfa must be between 0.0 and 1.0";
+                        return result; 
+                    }
+                    comp_filter_config_.alpha = val;
+                } else if (param.get_name() == "magnitude_low_threshold"){
+                    comp_filter_config_.magnitude_low_threshold = param.as_double();
+                } else if (param.get_name() == "magnitude_high_threshold"){
+                    comp_filter_config_.magnitude_high_threshold = param.as_double();
+                } else if (param.get_name() == "gimbal_lock_threshold"){
+                    double val = param.as_double();
+                    if (val < 0.7 || val > 1.0) {
+                        result.successful = false;
+                        result.reason = "gimbal_lock_threshold must be between 0.7 and 1.0";
+                        return result; 
+                    }
+                    comp_filter_config_.gimbal_lock_threshold = val;
+                } else if (param.get_name() == "beta"){
+                    double val = param.as_double();
+                    if (val <= 0.0) {
+                        result.successful = false;
+                        result.reason = "Beta must be greater than 0.0";
+                        return result; 
+                    }
+                    beta_ = val;
+                    if (mode_ == "madgwick"){
+                        madgwick_filter_->set_beta(beta_);
+                    }
+                } else if (param.get_name() == "mode"){
+                    std::string val_str = param.as_string();
+                    if (val_str == "comp" || val_str == "madgwick"){
+                        mode_ = val_str;
+                    } else {
+                        result.successful = false;
+                        result.reason = "mode must be either 'comp' or 'madgwick'";
+                        return result;
+                    }
+                } else if (param.get_name() == "frame_id"){
+                    frame_id_ = param.as_string();
+                } else if (param.get_name() == "start_calibration"){
+                    if (param.as_bool() == true){
+                        if (this->get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE){
+                            RCLCPP_WARN(this->get_logger(), "Calibration started...");
+                            imu_driver_->calibrate();
+                            RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
                         }
-                        comp_filter_config_.alpha = val;
-                    } else if (param.get_name() == "magnitude_low_threshold"){
-                        comp_filter_config_.magnitude_low_threshold = param.as_double();
-                    } else if (param.get_name() == "magnitude_high_threshold"){
-                        comp_filter_config_.magnitude_high_threshold = param.as_double();
-                    } else if (param.get_name() == "gimbal_lock_threshold"){
-                        double val = param.as_double();
-                        if (val < 0.7 || val > 1.0) {
-                            result.successful = false;
-                            result.reason = "gimbal_lock_threshold must be between 0.7 and 1.0";
-                            return result; 
-                        }
-                        comp_filter_config_.gimbal_lock_threshold = val;
-                    } else if (param.get_name() == "frame_id"){
-                        frame_id_ = param.as_string();
-                    } else if (param.get_name() == "start_calibration"){
+                    }
+                } else if (param.get_name() == "delete_calibration_data"){
                         if (param.as_bool() == true){
-                            if (this->get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE){
-                                RCLCPP_WARN(this->get_logger(), "Calibration started...");
-                                imu_driver_->calibrate();
-                                RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
-                            }
-                        }
-                    } else if (param.get_name() == "delete_calibration_data"){
-                           if (param.as_bool() == true){
-                            if (this->get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE){
-                                RCLCPP_WARN(this->get_logger(), "Calibration started...");
-                                imu_driver_->delete_calibration_data();
-                                RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
-                            }
+                        if (this->get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE){
+                            RCLCPP_WARN(this->get_logger(), "Calibration started...");
+                            imu_driver_->delete_calibration_data();
+                            RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
                         }
                     }
                 }
@@ -91,6 +119,10 @@ last_time_(this->get_clock()->now())
             return result;
         }
     );
+    // Initializing madgwick filter class
+    madgwick_filter_ = std::make_unique<imu_madgwick::MadgwickFilter>(
+        imu_madgwick::MadgwickFilter(beta_,imu_madgwick::MadgwickFilter::INITIAL_POSE));
+    madgwick_filter_->set_beta(beta_);
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNode::on_configure(
@@ -161,30 +193,44 @@ void ImuNode::publisher_callback()
         last_time_ = this->get_clock()->now();
         first_run_ = false;
     } else {
-        auto dt = get_dt();
+        sensor_msgs::msg::Imu imu_msg;
 
-        // Copying parameters under mutex to prevent race conditions when using multi threading Nodes.
-        ImuNode::ComplementaryFilterConfig comp_filter_config_copy;
-        {
-            std::lock_guard<std::mutex> lock(param_mutex_);
-            comp_filter_config_copy = comp_filter_config_;
+        try{
+            auto imu_data = imu_driver_->getAllData(true);
+            auto dt = get_dt();
+            // Logging raw data at 1 second intervals
+            RCLCPP_INFO_THROTTLE(
+                this->get_logger(),
+                *this->get_clock(),
+                1000,
+                "\nAccelerations\nx: %.2f g\ty: %.2f g\tz: %.2f g\nAngilar velocities\nx: %.2f rad/s\ty: %.2f rad/s\tz: %.2f rad/s",
+                imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
+                imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
+
+            if (mode_ == "comp"){
+
+                imu_msg = complementary_filter(imu_data, comp_filter_config_, dt);
+            } else if (mode_ == "madgwick"){
+                if (madgwick_filter_->update(imu_data, dt.seconds())){
+                    auto q_current = madgwick_filter_->get_current_orientation();
+                    imu_msg.orientation.w = q_current.w;
+                    imu_msg.orientation.x = q_current.x;
+                    imu_msg.orientation.y = q_current.y;
+                    imu_msg.orientation.z = q_current.z;
+                    imu_msg.header.stamp = last_time_;
+                } else {
+                    madgwick_er_count_ += 1;
+                    if (madgwick_er_count_ > 10){
+                        RCLCPP_ERROR(this->get_logger(), "Madgwick filter malfunction!");
+                    }
+                }
+            }
+            imu_msg.header.frame_id = frame_id_;
+            imu_publisher_->publish(imu_msg);
+        } catch (std::exception& e){
+            RCLCPP_ERROR(this->get_logger(), "IMU sensor node malfunction: %s", e.what());
         }
-
-        auto imu_data = imu_driver_->getAllData(true);
-
-        RCLCPP_INFO_THROTTLE(
-            this->get_logger(),
-            *this->get_clock(),
-            1000,
-            "\nAccelerations\nx: %.2f g\ty: %.2f g\tz: %.2f g\nAngilar velocities\nx: %.2f rad/s\ty: %.2f rad/s\tz: %.2f rad/s",
-            imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
-            imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
-
-        sensor_msgs::msg::Imu imu_msg = complementary_filter(imu_data, comp_filter_config_copy, dt);
-        imu_msg.header.frame_id = frame_id_;
-        imu_publisher_->publish(imu_msg);
     }
-    
 }
 
 sensor_msgs::msg::Imu ImuNode::complementary_filter(

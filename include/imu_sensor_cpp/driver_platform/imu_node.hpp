@@ -14,6 +14,7 @@
 #include "rclcpp/qos.hpp"
 
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
+#include "imu_sensor_cpp/algorithms/madgwick_filter.hpp"
 
 namespace imu_sensor_cpp
 {   
@@ -109,7 +110,7 @@ namespace imu_sensor_cpp
         rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
         /** ROS timer for periodic data acquisition */
         rclcpp::TimerBase::SharedPtr timer_;
-
+        /** Parameter change callback handle */
         rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
         // --- Hardware Drivers ---
@@ -117,15 +118,17 @@ namespace imu_sensor_cpp
         std::unique_ptr<mpu6050cust_driver::LinuxI2C> i2c_interface_;
         /** MPU6050 sensor driver logic */
         std::unique_ptr<mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>> imu_driver_;
-
-        //**Parameters mutex */
-        mutable std::mutex param_mutex_;
+        /** Madgwick filter math calass*/
+        std::unique_ptr<imu_madgwick::MadgwickFilter> madgwick_filter_;
 
         // --- Internal State ---
         /** Timestamp of the previous iteration for dt calculation */
         builtin_interfaces::msg::Time last_time_;
         /** Initialization flag to skip first dt calculation */
         bool first_run_ = true;
+        /**Madgwick failure count*/
+        int madgwick_er_count_;
+         
         
         
         /** Current Roll angle estimation [rad] */
@@ -142,6 +145,10 @@ namespace imu_sensor_cpp
         bool delete_calibration_data_;
         /** Complementary Filter configuration parameters */
         ComplementaryFilterConfig comp_filter_config_;
+        /** Madgwick filter parameter */
+        double beta_;
+        /**Operating filter mode*/
+        std::string mode_;
     };
 }
 #endif //IMU_SENSOR_NODE_HPP
