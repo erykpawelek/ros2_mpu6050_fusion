@@ -18,6 +18,7 @@ find_package(lifecycle_msgs REQUIRED)
 # Creating libraries
 add_library(imu_hardware_lib include/imu_sensor_cpp/driver_platform/linuxI2C.cpp)
 add_library(madgwick_filter_lib src/algorithms/madgwick_filter.cpp)
+add_library(complementary_filter_lib src/algorithms/complementary_filter.cpp)
 
 # Pointing where are heder files for specified library
 target_include_directories(imu_hardware_lib PUBLIC
@@ -25,6 +26,10 @@ target_include_directories(imu_hardware_lib PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 target_include_directories(madgwick_filter_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_include_directories(complementary_filter_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
@@ -37,6 +42,7 @@ target_link_libraries(
   imu_node 
   imu_hardware_lib
   madgwick_filter_lib
+  complementary_filter_lib
   i2c
   )
 # Adding ROS2 dependencies
@@ -49,6 +55,7 @@ ament_target_dependencies(imu_node
 install( TARGETS
   imu_hardware_lib
   madgwick_filter_lib
+  complementary_filter_lib
   imu_node
   DESTINATION lib/${PROJECT_NAME})
 

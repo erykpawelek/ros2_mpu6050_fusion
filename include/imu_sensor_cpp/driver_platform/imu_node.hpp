@@ -14,7 +14,9 @@
 #include "rclcpp/qos.hpp"
 
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
+
 #include "imu_sensor_cpp/algorithms/madgwick_filter.hpp"
+#include "imu_sensor_cpp/algorithms/complementary_filter.hpp"
 
 namespace imu_sensor_cpp
 {   
@@ -78,28 +80,9 @@ namespace imu_sensor_cpp
         void publisher_callback();
         
         /**
-         * @brief Complementary filter implementation for orientation estimation.
-         * Performs sensor fusion using accelerometer and gyroscope data.
-         * Handles mathematical singularities (Gimbal Lock) and vibration rejection.
-         * @param imu_data Struct containing raw IMU data (accel in g, gyro in rad/s).
-         * @param alfa Filter coefficient (weight for gyroscope integration).
-         * @return sensor_msgs::msg::Imu message with estimated orientation (Quaternion).
+         * @brief Calculates time step between each cycle.
+         * @return rclcpp::Duration class object.
          */
-        sensor_msgs::msg::Imu complementary_filter(
-            const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data,
-            ImuNode::ComplementaryFilterConfig comp_filter_config_copy,
-            rclcpp::Duration dt);
-        
-        /**
-         * @brief Converts Euler angles to Quaternion representation.
-         * Follows ROS REP-103 standard (Z-Y-X sequence implied).
-         * @param roll Roll angle [rad]
-         * @param pitch Pitch angle [rad]
-         * @param yaw Yaw angle [rad]
-         * @return geometry_msgs::msg::Quaternion
-         */
-        geometry_msgs::msg::Quaternion euler_to_quaternion(double roll, double pitch, double yaw);
-
         rclcpp::Duration get_dt();
 
     private:
@@ -118,7 +101,9 @@ namespace imu_sensor_cpp
         std::unique_ptr<mpu6050cust_driver::LinuxI2C> i2c_interface_;
         /** MPU6050 sensor driver logic */
         std::unique_ptr<mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>> imu_driver_;
-        /** Madgwick filter math calass*/
+        /** Complementary filter math class */
+        std::unique_ptr<imu_complementary::ComplementaryFilter> complementary_filter_;
+        /** Madgwick filter math calass */
         std::unique_ptr<imu_madgwick::MadgwickFilter> madgwick_filter_;
 
         // --- Internal State ---
@@ -127,26 +112,13 @@ namespace imu_sensor_cpp
         /** Initialization flag to skip first dt calculation */
         bool first_run_ = true;
         /**Madgwick failure count*/
-        int madgwick_er_count_;
-         
-        
-        
-        /** Current Roll angle estimation [rad] */
-        double last_roll_ = 0.0;
-        /** Current Pitch angle estimation [rad] */
-        double last_pitch_ = 0.0;
-        /** Current Yaw angle estimation [rad] */
-        double last_yaw_ = 0.0;
-        
+        int accel_er_count_;
+            
         // --- Parameters ---
         /** Frame ID for IMU messages */
         std::string frame_id_;
         /** Flag to delete calibration data */
         bool delete_calibration_data_;
-        /** Complementary Filter configuration parameters */
-        ComplementaryFilterConfig comp_filter_config_;
-        /** Madgwick filter parameter */
-        double beta_;
         /**Operating filter mode*/
         std::string mode_;
     };

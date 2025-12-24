@@ -3,7 +3,6 @@
 #include <stdexcept>
 #include <chrono>
 #include <cmath>
-#include <mutex>
 #include <functional>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
@@ -14,7 +13,9 @@
 
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
 #include "imu_sensor_cpp/driver_platform/imu_node.hpp"
+
 #include "imu_sensor_cpp/algorithms/madgwick_filter.hpp"
+#include "imu_sensor_cpp/algorithms/complementary_filter.hpp"
 
 using namespace imu_sensor_cpp;
 
@@ -23,8 +24,11 @@ ImuNode::ImuNode(const std::string & node_name, const rclcpp::NodeOptions & opti
 rclcpp_lifecycle::LifecycleNode(node_name, options),
 qos_policy_(rclcpp::QoS(1).best_effort().durability_volatile()),
 last_time_(this->get_clock()->now()),
-madgwick_er_count_(0)
+accel_er_count_(0)
 {
+    imu_complementary::ComplementaryFilter::ComplementaryFilterConfig init_comp_config;
+    double init_beta;
+
     // Complementary filter parameters
     this->declare_parameter<double>("alfa", 0.98);
     this->declare_parameter<double>("magnitude_low_threshold", 0.85);
@@ -40,11 +44,11 @@ madgwick_er_count_(0)
     this->declare_parameter<bool>("start_calibration", false);
     this->declare_parameter<bool>("delete_calibration_data", false);
 
-    this->get_parameter("alfa", comp_filter_config_.alpha);
-    this->get_parameter("magnitude_low_threshold", comp_filter_config_.magnitude_low_threshold);
-    this->get_parameter("magnitude_high_threshold", comp_filter_config_.magnitude_high_threshold);
-    this->get_parameter("gimbal_lock_threshold", comp_filter_config_.gimbal_lock_threshold);
-    this->get_parameter("beta", beta_);
+    this->get_parameter("alfa", init_comp_config.alpha);
+    this->get_parameter("magnitude_low_threshold", init_comp_config.magnitude_low_threshold);
+    this->get_parameter("magnitude_high_threshold", init_comp_config.magnitude_high_threshold);
+    this->get_parameter("gimbal_lock_threshold", init_comp_config.gimbal_lock_threshold);
+    this->get_parameter("beta", init_beta);
     this->get_parameter("mode", mode_);
     this->get_parameter("frame_id", frame_id_);
     this->get_parameter("delete_calibration_data", delete_calibration_data_);
@@ -63,11 +67,11 @@ madgwick_er_count_(0)
                         result.reason = "Alfa must be between 0.0 and 1.0";
                         return result; 
                     }
-                    comp_filter_config_.alpha = val;
+                    complementary_filter_->update_alpha(val);
                 } else if (param.get_name() == "magnitude_low_threshold"){
-                    comp_filter_config_.magnitude_low_threshold = param.as_double();
+                    complementary_filter_->update_magnitude_low_threshold(param.as_double());
                 } else if (param.get_name() == "magnitude_high_threshold"){
-                    comp_filter_config_.magnitude_high_threshold = param.as_double();
+                    complementary_filter_->update_magnitude_high_threshold(param.as_double());
                 } else if (param.get_name() == "gimbal_lock_threshold"){
                     double val = param.as_double();
                     if (val < 0.7 || val > 1.0) {
@@ -75,7 +79,7 @@ madgwick_er_count_(0)
                         result.reason = "gimbal_lock_threshold must be between 0.7 and 1.0";
                         return result; 
                     }
-                    comp_filter_config_.gimbal_lock_threshold = val;
+                    complementary_filter_->update_gimbal_lock_threshold(val);
                 } else if (param.get_name() == "beta"){
                     double val = param.as_double();
                     if (val <= 0.0) {
@@ -83,10 +87,7 @@ madgwick_er_count_(0)
                         result.reason = "Beta must be greater than 0.0";
                         return result; 
                     }
-                    beta_ = val;
-                    if (mode_ == "madgwick"){
-                        madgwick_filter_->set_beta(beta_);
-                    }
+                    madgwick_filter_->set_beta(val);
                 } else if (param.get_name() == "mode"){
                     std::string val_str = param.as_string();
                     if (val_str == "comp" || val_str == "madgwick"){
@@ -119,10 +120,14 @@ madgwick_er_count_(0)
             return result;
         }
     );
+
+    // Initializing complementary filter class
+    complementary_filter_ = std::make_unique<imu_complementary::ComplementaryFilter>(
+        imu_complementary::ComplementaryFilter(init_comp_config));
+
     // Initializing madgwick filter class
     madgwick_filter_ = std::make_unique<imu_madgwick::MadgwickFilter>(
-        imu_madgwick::MadgwickFilter(beta_,imu_madgwick::MadgwickFilter::INITIAL_POSE));
-    madgwick_filter_->set_beta(beta_);
+        imu_madgwick::MadgwickFilter(init_beta ,imu_madgwick::MadgwickFilter::INITIAL_POSE));
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNode::on_configure(
@@ -194,10 +199,27 @@ void ImuNode::publisher_callback()
         first_run_ = false;
     } else {
         sensor_msgs::msg::Imu imu_msg;
+        bool publish_data = false;
 
         try{
             auto imu_data = imu_driver_->getAllData(true);
             auto dt = get_dt();
+            // Calculating unexpected accelerometer measurement for system health monitoring
+            double norm = std::sqrt(imu_data.accel_x * imu_data.accel_x +
+                                    imu_data.accel_y * imu_data.accel_y +
+                                    imu_data.accel_z * imu_data.accel_z);
+
+            if(norm < 1e-4){
+                accel_er_count_ += 1;
+                if (accel_er_count_ > 15){
+                    RCLCPP_WARN(this->get_logger(),
+                                "Accelerometer periodic zero measurement, perform basic diagnostics");
+                    accel_er_count_ = 0;
+                }
+            } else {
+                accel_er_count_ = 0;
+            }
+
             // Logging raw data at 1 second intervals
             RCLCPP_INFO_THROTTLE(
                 this->get_logger(),
@@ -207,9 +229,16 @@ void ImuNode::publisher_callback()
                 imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
                 imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
 
+            // State machine
             if (mode_ == "comp"){
-
-                imu_msg = complementary_filter(imu_data, comp_filter_config_, dt);
+                complementary_filter_->update(imu_data, dt.seconds());
+                auto q_current = complementary_filter_->euler_to_quaternion(complementary_filter_->get_current_orientation());
+                imu_msg.orientation.w = q_current.w;
+                imu_msg.orientation.x = q_current.x;
+                imu_msg.orientation.y = q_current.y;
+                imu_msg.orientation.z = q_current.z;
+                imu_msg.header.stamp = last_time_;
+                publish_data = true;
             } else if (mode_ == "madgwick"){
                 if (madgwick_filter_->update(imu_data, dt.seconds())){
                     auto q_current = madgwick_filter_->get_current_orientation();
@@ -218,119 +247,21 @@ void ImuNode::publisher_callback()
                     imu_msg.orientation.y = q_current.y;
                     imu_msg.orientation.z = q_current.z;
                     imu_msg.header.stamp = last_time_;
+                    publish_data = true;
                 } else {
-                    madgwick_er_count_ += 1;
-                    if (madgwick_er_count_ > 10){
-                        RCLCPP_ERROR(this->get_logger(), "Madgwick filter malfunction!");
-                    }
+                    RCLCPP_ERROR(this->get_logger(), 
+                                "Madgwick filter error occured (normalization error).");
+                    publish_data = false;
                 }
             }
-            imu_msg.header.frame_id = frame_id_;
-            imu_publisher_->publish(imu_msg);
+            if (publish_data){
+                imu_msg.header.frame_id = frame_id_;
+                imu_publisher_->publish(imu_msg);
+            }
         } catch (std::exception& e){
             RCLCPP_ERROR(this->get_logger(), "IMU sensor node malfunction: %s", e.what());
         }
     }
-}
-
-sensor_msgs::msg::Imu ImuNode::complementary_filter(
-    const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data,
-    ImuNode::ComplementaryFilterConfig comp_filter_config_copy,
-    rclcpp::Duration dt)
-{
-    sensor_msgs::msg::Imu imu_msg;
-    // First iteration empty for time data initialization
-    
-    float var_alfa_x, var_alfa_y;
-    double roll, pitch, yaw;
-    double accel_roll_part;
-
-    // Calculating magnitude of acceleration vector, to prevent errors during large accelerations
-    float magnitude = std::sqrt(imu_data.accel_x * imu_data.accel_x +
-                                imu_data.accel_y * imu_data.accel_y +
-                                imu_data.accel_z * imu_data.accel_z);
-    bool magnitude_ok = (magnitude < comp_filter_config_copy.magnitude_high_threshold &&
-         magnitude > comp_filter_config_copy.magnitude_low_threshold);
-
-    // Gimball lock prevention
-    bool orientation_x_ok = (imu_data.accel_x < comp_filter_config_copy.gimbal_lock_threshold &&
-         imu_data.accel_x > -comp_filter_config_copy.gimbal_lock_threshold);
-
-    if (magnitude_ok){
-        var_alfa_y = comp_filter_config_copy.alpha;
-        if (orientation_x_ok){
-            var_alfa_x = comp_filter_config_copy.alpha;
-            accel_roll_part = (std::atan2(imu_data.accel_y, imu_data.accel_z));
-        } else {
-            var_alfa_x = 1.0; // Gyro only
-            accel_roll_part = 0.0;
-        }
-    } else {
-        var_alfa_x = 1.0; // Gyro only
-        var_alfa_y = 1.0; // Gyro only
-        accel_roll_part = 0.0;
-    }
-    
-    // ---- ROLL CALCULATIONS ----
-    
-    double prediction_x = last_roll_ + (imu_data.gyro_x * dt.seconds());
-    double error_x = accel_roll_part - prediction_x;
-    // Using atan2() normalization to prevent discontuinities in angle calculation when close to 180/-180 degree
-    if (error_x < -M_PI){
-        error_x = error_x + 2 * M_PI;
-    } else if (error_x > M_PI){
-        error_x = error_x - 2 * M_PI;
-    } 
-    roll = prediction_x + (1.0 - var_alfa_x) * (error_x);
-
-    // ---- PITCH CALCULATIONS ----
-
-    double prediction_y = last_pitch_ + (imu_data.gyro_y * dt.seconds());
-    double error_y = (std::atan2(-imu_data.accel_x, std::sqrt(imu_data.accel_y * imu_data.accel_y +
-                                                              imu_data.accel_z * imu_data.accel_z)))
-        - prediction_y  ;
-
-    if (error_y < -M_PI){
-        error_y = error_y + 2 * M_PI;
-    } else if (error_y > M_PI){
-        error_y = error_y - 2 * M_PI;
-    } 
-    pitch = prediction_y + (1.0 - var_alfa_y) * (error_y);
-
-    // ---- YAW CALCULATIONS ----
-
-    yaw = last_yaw_ + (imu_data.gyro_z * dt.seconds());
-
-    // Saving last angles as calss members for safety
-    last_roll_ = roll;
-    last_pitch_ = pitch;
-    last_yaw_ = yaw;
-
-    // Message packing
-    imu_msg.orientation = euler_to_quaternion(last_roll_, last_pitch_, last_yaw_);
-    imu_msg.header.stamp = last_time_;
-    
-    return imu_msg;
-}
-
-geometry_msgs::msg::Quaternion ImuNode::euler_to_quaternion(double roll, double pitch, double yaw)
-{
-    geometry_msgs::msg::Quaternion quaternion;
-    // Defining quaternion's sinus and cosinus values form RPY angles
-    double cy = cos(yaw * 0.5);
-    double sy = sin(yaw * 0.5);
-    double cr = cos(roll * 0.5);
-    double sr = sin(roll * 0.5);
-    double cp = cos(pitch * 0.5);
-    double sp = sin(pitch * 0.5);
-
-    // Calculating union quaternion elements
-    quaternion.w = cy * cr * cp + sy * sr * sp; // w
-    quaternion.x = cy * sr * cp - sy * cr * sp; // x
-    quaternion.y = cy * cr * sp + sy * sr * cp; // y
-    quaternion.z = sy * cr * cp - cy * sr * sp; // z
-
-    return quaternion;
 }
 
 rclcpp::Duration ImuNode::get_dt(){
