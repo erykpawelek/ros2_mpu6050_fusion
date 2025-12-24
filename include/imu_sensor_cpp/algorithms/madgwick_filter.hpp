@@ -52,7 +52,8 @@ namespace imu_madgwick
         Quaternion get_current_orientation() const;
 
         /**
-         * @brief Function that actualize beta coefficient.
+         * @brief Updates the beta gain coefficient at runtime.
+         * @param beta New beta value (higher = trust accel more, lower = trust gyro more).
          */
         void set_beta(double beta);
  
