@@ -1,5 +1,5 @@
 #include "rclcpp/rclcpp.hpp"
-#include "imu_sensor_cpp/driver_platform/imu_node.hpp"
+#include "imu_sensor_cpp/node/imu_node.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 int main(int argc, char ** argv)

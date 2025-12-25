@@ -24,19 +24,6 @@ namespace imu_sensor_cpp
     class ImuNode : public rclcpp_lifecycle::LifecycleNode
     {
     public:
-        /**
-        * @brief Configuration struct for Complementary Filter parameters.
-        */
-        struct ComplementaryFilterConfig {
-            /** Complementary filter weight (0.0 - 1.0). Higher value trusts Gyro more. */
-            double alpha; 
-            /** Minimum acceptable gravity vector length [g] for correction. */
-            double magnitude_low_threshold; 
-            /** Maximum acceptable gravity vector length [g] for correction. */
-            double magnitude_high_threshold;
-            /** Threshold for Gimbal Lock detection on X-axis [g] (e.g., 0.97). */
-            double gimbal_lock_threshold; 
-        };   
         
         /**
          * @brief ImuNode class constructor.
@@ -103,7 +90,7 @@ namespace imu_sensor_cpp
         std::unique_ptr<mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>> imu_driver_;
         /** Complementary filter math class */
         std::unique_ptr<imu_complementary::ComplementaryFilter> complementary_filter_;
-        /** Madgwick filter math calass */
+        /** Madgwick filter math class */
         std::unique_ptr<imu_madgwick::MadgwickFilter> madgwick_filter_;
 
         // --- Internal State ---

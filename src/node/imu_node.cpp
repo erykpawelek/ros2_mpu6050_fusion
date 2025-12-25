@@ -12,7 +12,7 @@
 #include "lifecycle_msgs/msg/state.hpp"
 
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
-#include "imu_sensor_cpp/driver_platform/imu_node.hpp"
+#include "imu_sensor_cpp/node/imu_node.hpp"
 
 #include "imu_sensor_cpp/algorithms/madgwick_filter.hpp"
 #include "imu_sensor_cpp/algorithms/complementary_filter.hpp"
