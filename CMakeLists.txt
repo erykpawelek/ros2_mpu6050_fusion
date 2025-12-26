@@ -35,7 +35,7 @@ target_include_directories(complementary_filter_lib PUBLIC
 )
 
 add_executable(imu_node
-  src/imu_node.cpp
+  src/node/imu_node.cpp
   src/main.cpp)
 # Linking imu_node with other libraries
 target_link_libraries(
