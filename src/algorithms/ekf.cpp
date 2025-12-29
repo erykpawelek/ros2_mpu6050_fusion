@@ -15,6 +15,7 @@ namespace imu_ekf
     first_run_(true)
     {
         P_.setIdentity();
+        P_ = P_ * 0.001;
     }
 
     void ExtendedKalmanFilter::init(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data)
@@ -59,6 +60,7 @@ namespace imu_ekf
         q_new.normalize();
         // Updating state vector
         x_ << q_new.w(), q_new.x(), q_new.y(), q_new.z();
+        x_.normalize();
 
         // Calculating omega matrix
         Eigen::Matrix4d omega;
@@ -91,7 +93,15 @@ namespace imu_ekf
     }
 
     void ExtendedKalmanFilter::update(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data)
-    {
+    {   
+        double accel_norm = std::sqrt(imu_data.accel_x * imu_data.accel_x + 
+                                      imu_data.accel_y * imu_data.accel_y + 
+                                      imu_data.accel_z * imu_data.accel_z);
+
+        if (accel_norm < 0.85 || accel_norm > 1.15) {
+            return; 
+        }   
+
         // Working on norm gravity vector to be roboust against linear accelerations
         auto GRAVITY_VECTOR = Eigen::Vector3d(0.0, 0.0, 1.0);
 
@@ -123,10 +133,10 @@ namespace imu_ekf
         H(1, 2) =  2 * q_prev.z();
         H(1, 3) =  2 * q_prev.y();
 
-        H(2, 0) =  0.0;
-        H(2, 1) = -4 * q_prev.x();
-        H(2, 2) = -4 * q_prev.y();
-        H(2, 3) =  0.0;
+        H(2, 0) =  2 * q_prev.w();
+        H(2, 1) = -2 * q_prev.x();
+        H(2, 2) = -2 * q_prev.y();
+        H(2, 3) =  2 * q_prev.z();
 
         // Calculating covariance of innovation
         Eigen::Matrix3d S = H * P_ * H.transpose() + R_;
@@ -140,6 +150,8 @@ namespace imu_ekf
 
         // Calculating new error covariance matrix
         P_ = (Eigen::Matrix4d::Identity() - K * H) * P_;
+        // Keeping P symetric
+        P_ = 0.5 * (P_ + P_.transpose());
     }
 
     void ExtendedKalmanFilter::init_first_run(){

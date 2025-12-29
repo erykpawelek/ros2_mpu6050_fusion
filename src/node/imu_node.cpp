@@ -43,7 +43,7 @@ accel_er_count_(0)
     // Madgwick filter parameter
     this->declare_parameter<double>("beta", 0.1);
     // EKF filter parameters
-    this->declare_parameter<std::vector<double>>("R", std::vector<double>{0.05, 0.05, 0.05});
+    this->declare_parameter<std::vector<double>>("R", std::vector<double>{50.0, 50.0, 50.0});
     this->declare_parameter<std::vector<double>>("Q", std::vector<double>{0.01, 0.01, 0.01, 0.01});
     // State machine parameter
     this->declare_parameter<std::string>("mode", "ekf");
