@@ -2,37 +2,42 @@
 #include <eigen3/Eigen/Dense>
 
 #include "imu_sensor_cpp/algorithms/ekf.hpp"
+#include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
 
-namespace ekf
+namespace imu_ekf
 {
     ExtendedKalmanFilter::ExtendedKalmanFilter(
-        const MeasurementMatrix & R_noise,
-        double process_noise_variance)
-    : R_(R_noise)
+        const ExtendedKalmanFilter::MeasurementMatrix & R,
+        const ExtendedKalmanFilter::StateMatrix & Q)
+    : 
+    R_(R),
+    Q_(Q),
+    first_run_(true)
     {
-        Q_.setIdentity();
-        Q_ *= process_noise_variance;
-        
         P_.setIdentity();
     }
 
     void ExtendedKalmanFilter::init(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data)
     {
-        // Calculating initial state prediction
-        double roll = std::atan2(imu_data.accel_y, imu_data.accel_z);
-        double pitch = std::atan2(-imu_data.accel_x, std::sqrt(imu_data.accel_y * imu_data.accel_y +
-                                                               imu_data.accel_z * imu_data.accel_z));
-        double yaw = 0.0;
+        if (first_run_){
+            // Calculating initial state prediction
+            double roll = std::atan2(imu_data.accel_y, imu_data.accel_z);
+            double pitch = std::atan2(-imu_data.accel_x, std::sqrt(imu_data.accel_y * imu_data.accel_y +
+                                                                imu_data.accel_z * imu_data.accel_z));
+            double yaw = 0.0;
 
-        // Calculating quaternion represetation of initial prediction using eigen tools
-        Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitX());
-        Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
-        Eigen::AngleAxisd yawAngle(yaw, Eigen::Vector3d::UnitZ());
+            // Calculating quaternion represetation of initial prediction using eigen tools
+            Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitX());
+            Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
+            Eigen::AngleAxisd yawAngle(yaw, Eigen::Vector3d::UnitZ());
 
-        Eigen::Quaternion q = yawAngle * pitchAngle * rollAngle;
+            Eigen::Quaternion q = yawAngle * pitchAngle * rollAngle;
 
-        // Injecting initial quaternion into state vector class member variable
-        x_ << q.w(), q.x(), q.y(), q.z();
+            // Injecting initial quaternion into state vector class member variable
+            x_ << q.w(), q.x(), q.y(), q.z();
+
+            first_run_ = false;
+        }
     }
 
     void ExtendedKalmanFilter::predict(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data, double dt)
@@ -87,6 +92,7 @@ namespace ekf
 
     void ExtendedKalmanFilter::update(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data)
     {
+        // Working on norm gravity vector to be roboust against linear accelerations
         auto GRAVITY_VECTOR = Eigen::Vector3d(0.0, 0.0, 1.0);
 
         // Refactoring state format for quaternion operations
@@ -95,6 +101,7 @@ namespace ekf
         // Measurement vector from accelerometer
         Eigen::Vector3d z_meas;
         z_meas << imu_data.accel_x, imu_data.accel_y, imu_data.accel_z;
+        if(z_meas.norm() < 1e-6) return; //Prevention against deviding by 0
         z_meas.normalize();
 
         // Predicted measurement based on current state
@@ -124,8 +131,8 @@ namespace ekf
         // Calculating covariance of innovation
         Eigen::Matrix3d S = H * P_ * H.transpose() + R_;
 
-        // Kalman Gain calculation, using dynamic matrix type to fit 4x3 dims
-        Eigen::MatrixXd K = P_ * H.transpose() * S.inverse();
+        // Kalman Gain calculation
+        Eigen::Matrix<double, 4, 3> K = P_ * H.transpose() * S.inverse();
 
         // Calculating new state estimate
         x_ = x_ + (K * innovation);
@@ -133,5 +140,21 @@ namespace ekf
 
         // Calculating new error covariance matrix
         P_ = (Eigen::Matrix4d::Identity() - K * H) * P_;
+    }
+
+    void ExtendedKalmanFilter::init_first_run(){
+        first_run_ = true;
+    }
+
+    ExtendedKalmanFilter::StateVector ExtendedKalmanFilter::get_state() const{
+        return x_;
+    }
+
+    void ExtendedKalmanFilter::setR(std::vector<double> R_vector){
+        R_ = Eigen::Map<const Eigen::Vector3d>(R_vector.data()).asDiagonal();
+    }
+
+    void ExtendedKalmanFilter::setQ(std::vector<double> Q_vector){
+        Q_ = Eigen::Map<const Eigen::Vector4d>(Q_vector.data()).asDiagonal();
     }
 } // namespace ekf

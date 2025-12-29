@@ -17,6 +17,7 @@
 
 #include "imu_sensor_cpp/algorithms/madgwick_filter.hpp"
 #include "imu_sensor_cpp/algorithms/complementary_filter.hpp"
+#include "imu_sensor_cpp/algorithms/ekf.hpp"
 
 namespace imu_sensor_cpp
 {   
@@ -92,6 +93,8 @@ namespace imu_sensor_cpp
         std::unique_ptr<imu_complementary::ComplementaryFilter> complementary_filter_;
         /** Madgwick filter math class */
         std::unique_ptr<imu_madgwick::MadgwickFilter> madgwick_filter_;
+        /** Extended Kalman Filter class */
+        std::unique_ptr<imu_ekf::ExtendedKalmanFilter> extended_kalman_filter_;
 
         // --- Internal State ---
         /** Timestamp of the previous iteration for dt calculation */
@@ -100,6 +103,7 @@ namespace imu_sensor_cpp
         bool first_run_ = true;
         /**Madgwick failure count*/
         int accel_er_count_;
+        
             
         // --- Parameters ---
         /** Frame ID for IMU messages */

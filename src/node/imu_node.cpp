@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <eigen3/Eigen/Dense>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -16,6 +17,7 @@
 
 #include "imu_sensor_cpp/algorithms/madgwick_filter.hpp"
 #include "imu_sensor_cpp/algorithms/complementary_filter.hpp"
+#include "imu_sensor_cpp/algorithms/ekf.hpp"
 
 using namespace imu_sensor_cpp;
 
@@ -28,6 +30,10 @@ accel_er_count_(0)
 {
     imu_complementary::ComplementaryFilter::ComplementaryFilterConfig init_comp_config;
     double init_beta;
+    std::vector<double> R_vector;
+    std::vector<double> Q_vector;
+    imu_ekf::ExtendedKalmanFilter::MeasurementMatrix R;
+    imu_ekf::ExtendedKalmanFilter::StateMatrix Q;
 
     // Complementary filter parameters
     this->declare_parameter<double>("alfa", 0.98);
@@ -36,8 +42,11 @@ accel_er_count_(0)
     this->declare_parameter<double>("gimbal_lock_threshold", 0.97);
     // Madgwick filter parameter
     this->declare_parameter<double>("beta", 0.1);
+    // EKF filter parameters
+    this->declare_parameter<std::vector<double>>("R", std::vector<double>{0.05, 0.05, 0.05});
+    this->declare_parameter<std::vector<double>>("Q", std::vector<double>{0.01, 0.01, 0.01, 0.01});
     // State machine parameter
-    this->declare_parameter<std::string>("mode", "madgwick");
+    this->declare_parameter<std::string>("mode", "ekf");
     // Publisher parameters
     this->declare_parameter<std::string>("frame_id", "imu_link");
     // MPU6050 calibration parameters
@@ -49,6 +58,8 @@ accel_er_count_(0)
     this->get_parameter("magnitude_high_threshold", init_comp_config.magnitude_high_threshold);
     this->get_parameter("gimbal_lock_threshold", init_comp_config.gimbal_lock_threshold);
     this->get_parameter("beta", init_beta);
+    this->get_parameter("R", R_vector);
+    this->get_parameter("Q", Q_vector);
     this->get_parameter("mode", mode_);
     this->get_parameter("frame_id", frame_id_);
     this->get_parameter("delete_calibration_data", delete_calibration_data_);
@@ -88,13 +99,29 @@ accel_er_count_(0)
                         return result; 
                     }
                     madgwick_filter_->set_beta(val);
+                } else if (param.get_name() == "R"){
+                    std::vector<double> val = param.as_double_array();
+                    if (val.size() != 3){
+                        result.successful = false;
+                        result.reason = "R must be 3 element vector";
+                        return result;
+                    }
+                    extended_kalman_filter_->setR(val);
+                } else if (param.get_name() == "Q"){
+                    std::vector<double> val = param.as_double_array();
+                    if (val.size() != 4){
+                        result.successful = false;
+                        result.reason = "Q must be 3 element vector";
+                        return result;
+                    }
+                    extended_kalman_filter_->setQ(val);   
                 } else if (param.get_name() == "mode"){
                     std::string val_str = param.as_string();
-                    if (val_str == "comp" || val_str == "madgwick"){
+                    if (val_str == "comp" || val_str == "madg" || val_str == "ekf"){
                         mode_ = val_str;
                     } else {
                         result.successful = false;
-                        result.reason = "mode must be either 'comp' or 'madgwick'";
+                        result.reason = "mode must be either 'comp', 'madg' or 'ekf'";
                         return result;
                     }
                 } else if (param.get_name() == "frame_id"){
@@ -128,6 +155,13 @@ accel_er_count_(0)
     // Initializing madgwick filter class
     madgwick_filter_ = std::make_unique<imu_madgwick::MadgwickFilter>(
         imu_madgwick::MadgwickFilter(init_beta ,imu_madgwick::MadgwickFilter::INITIAL_POSE));
+
+    //Initializing ekf filter class
+    //Maping vector into eigen objects
+    R = Eigen::Map<const Eigen::Vector3d>(R_vector.data()).asDiagonal();
+    Q = Eigen::Map<const Eigen::Vector4d>(Q_vector.data()).asDiagonal();
+    extended_kalman_filter_ = std::make_unique<imu_ekf::ExtendedKalmanFilter>(
+        imu_ekf::ExtendedKalmanFilter(R, Q));
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNode::on_configure(
@@ -197,6 +231,7 @@ void ImuNode::publisher_callback()
     if (first_run_){
         last_time_ = this->get_clock()->now();
         first_run_ = false;
+
     } else {
         sensor_msgs::msg::Imu imu_msg;
         bool publish_data = false;
@@ -239,7 +274,7 @@ void ImuNode::publisher_callback()
                 imu_msg.orientation.z = q_current.z;
                 imu_msg.header.stamp = last_time_;
                 publish_data = true;
-            } else if (mode_ == "madgwick"){
+            } else if (mode_ == "madg"){
                 if (madgwick_filter_->update(imu_data, dt.seconds())){
                     auto q_current = madgwick_filter_->get_current_orientation();
                     imu_msg.orientation.w = q_current.w;
@@ -253,6 +288,17 @@ void ImuNode::publisher_callback()
                                 "Madgwick filter error occured (normalization error).");
                     publish_data = false;
                 }
+            } else if (mode_ == "ekf"){
+                extended_kalman_filter_->init(imu_data);
+                extended_kalman_filter_->predict(imu_data, dt.seconds());
+                extended_kalman_filter_->update(imu_data);
+                auto q = extended_kalman_filter_->get_state();
+                imu_msg.orientation.w = q(0);
+                imu_msg.orientation.x = q(1);
+                imu_msg.orientation.y = q(2);
+                imu_msg.orientation.z = q(3);
+                imu_msg.header.stamp = last_time_;
+                publish_data = true;
             }
             if (publish_data){
                 imu_msg.header.frame_id = frame_id_;

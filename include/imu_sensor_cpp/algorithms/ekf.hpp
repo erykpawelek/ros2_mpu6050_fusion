@@ -2,10 +2,12 @@
 #define EXTENDED_KALMAN_FILTER
 
 #include <eigen3/Eigen/Dense>
+#include <cmath>
+#include <vector>
 
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp"
 
-namespace ekf
+namespace imu_ekf
 {
 /**
 * @class ExtendedKalmanFilter
@@ -49,7 +51,7 @@ public:
     */
     ExtendedKalmanFilter(
         const MeasurementMatrix& R_noise, 
-        double process_noise_variance);
+        const StateMatrix & Q);
 
     /**
     * @brief Initializes the state using the first accelerometer reading.
@@ -66,6 +68,14 @@ public:
 
     void update(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data);
 
+    void init_first_run();
+
+    StateVector get_state() const;
+
+    void setR(std::vector<double> R_vector);
+
+    void setQ(std::vector<double> Q_vector);
+
 private:
 
     /**
@@ -73,6 +83,12 @@ private:
     * x = [qw, qx, qy, qz]^T
     */
     StateVector x_;
+
+    /**
+    * @brief Measurement Noise Covariance Matrix.
+    * Represents the uncertainty of the sensor (accelerometer).
+    */
+    MeasurementMatrix R_;
 
     /**
     * @brief Process Noise Covariance Matrix.
@@ -88,11 +104,7 @@ private:
     */
     StateMatrix P_;
 
-    /**
-    * @brief Measurement Noise Covariance Matrix.
-    * Represents the uncertainty of the sensor (accelerometer).
-    */
-    MeasurementMatrix R_;
+    bool first_run_;
 };
 }
 #endif 
