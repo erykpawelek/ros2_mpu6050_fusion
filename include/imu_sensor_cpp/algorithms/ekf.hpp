@@ -55,25 +55,51 @@ public:
 
     /**
     * @brief Initializes the state using the first accelerometer reading.
-    *
     * Calculates initial Roll and Pitch angles based on the gravity vector
     * (assuming the robot is stationary) and converts them to the initial Quaternion.
     * Yaw is initialized to 0.0.
-    *
     * @param imu_data Structure containing raw IMU data (accelerometer).
     */
     void init(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data);
 
+    /**
+     * @brief Calculates state prediction along with prediction covariance matrix P_.
+     *  Prediction in this implementation is orientation calculated based on gyroscope data.
+     * @param imu_data MPU6050CustomDriver class data struct containing raw imu sensor data.
+     * @param dt Time step between iterations.
+     */
     void predict(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data, double dt);
 
+    /**
+     * @brief Corrects the predicted state using accelerometer measurements.
+     * * This step computes the Kalman Gain and updates the state vector and 
+     * covariance matrix by comparing the predicted gravity vector with the actual accelerometer reading.
+     * @param dt Time step between iterations.
+     */
     void update(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data);
 
+    /**
+    * @brief Resets the initialization flag to true, forcing the execution of init() on the next iteration.
+    */
     void init_first_run();
 
+    /**
+     * @brief Returns current state vector x_, containing orientation in quaternion form.
+     */
     StateVector get_state() const;
 
+    /**
+     * @brief Sets measurement covariance matrix R_. 
+     * * In this implementation we assume that axis covariances are independent of each other.
+     * @param R_vector Vector containing diagonal elements of R_ class member matrix. It has to be 3 element vector.
+     */
     void setR(std::vector<double> R_vector);
-
+    
+    /**
+     * @brief Sets prediction covariance matrix Q_. 
+     * * In this implementation we assume that axis covariances are independent of each other.
+     * @param Q_vector Vector containing diagonal elements of Q_ class member matrix. It has to be 4 element vector.
+     */
     void setQ(std::vector<double> Q_vector);
 
 private:
@@ -104,6 +130,10 @@ private:
     */
     StateMatrix P_;
 
+    /**
+     * @brief First iteration initialization flag.
+     * It's responsible for runing init function in first iteration.
+     */ 
     bool first_run_;
 };
 }

@@ -87,7 +87,7 @@ namespace imu_ekf
         // Calculating transition matrix F
         Eigen::Matrix4d F = Eigen::Matrix4d::Identity() + (0.5 * dt * omega);
 
-        // Calculating new value of error covariance matrix P
+        // Calculating new value of prediction error covariance matrix P
         P_ = F * P_ * F.transpose() + Q_;
 
     }
