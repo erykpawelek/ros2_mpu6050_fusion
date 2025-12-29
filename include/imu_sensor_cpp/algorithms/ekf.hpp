@@ -105,10 +105,21 @@ namespace imu_ekf
          */
         void setQ(std::vector<double> & Q_vector);
 
+        /**
+         * @brief Checks gravity vector magnitude from accelerometer reading and compares with magnitude thresholds limits.
+         * @param imu_data Structure containing raw IMU data (accelerometer).
+         * @return Bool value, true if magnitude is out of range, false if magnitude is in range. 
+         */
         bool magnitude_check(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data);
 
+        /**
+         * @brief Updates class member magnitude_low_threshold_value.
+         */
         void set_magnitude_low_threshold(double & magnitude_low_threshold);
 
+        /**
+         * @brief Updates class member magnitude_high_threshold_value.
+         */
         void set_magnitude_high_threshold(double & magnitude_high_threshold);
 
     private:
