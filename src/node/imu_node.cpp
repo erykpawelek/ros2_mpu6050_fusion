@@ -37,13 +37,13 @@ accel_er_count_(0)
 
     // Complementary filter parameters
     this->declare_parameter<double>("alfa", 0.98);
-    this->declare_parameter<double>("magnitude_low_threshold", 0.85);
-    this->declare_parameter<double>("magnitude_high_threshold", 1.15);
+    this->declare_parameter<double>("magnitude_low_threshold", 0.85); // Used by ekf and comp
+    this->declare_parameter<double>("magnitude_high_threshold", 1.15);// Used by ekf and comp
     this->declare_parameter<double>("gimbal_lock_threshold", 0.97);
     // Madgwick filter parameter
     this->declare_parameter<double>("beta", 0.1);
     // EKF filter parameters
-    this->declare_parameter<std::vector<double>>("R", std::vector<double>{50.0, 50.0, 50.0});
+    this->declare_parameter<std::vector<double>>("R", std::vector<double>{6.0, 6.0, 6.0});
     this->declare_parameter<std::vector<double>>("Q", std::vector<double>{0.01, 0.01, 0.01, 0.01});
     // State machine parameter
     this->declare_parameter<std::string>("mode", "ekf");
@@ -64,6 +64,7 @@ accel_er_count_(0)
     this->get_parameter("frame_id", frame_id_);
     this->get_parameter("delete_calibration_data", delete_calibration_data_);
 
+    // On set parameters callback handle
     param_callback_handle_ = this->add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter> & parameters)
         {   
@@ -118,6 +119,9 @@ accel_er_count_(0)
                 } else if (param.get_name() == "mode"){
                     std::string val_str = param.as_string();
                     if (val_str == "comp" || val_str == "madg" || val_str == "ekf"){
+                        if (val_str == "ekf"){
+                            extended_kalman_filter_->init_first_run();
+                        } 
                         mode_ = val_str;
                     } else {
                         result.successful = false;

@@ -8,10 +8,14 @@ namespace imu_ekf
 {
     ExtendedKalmanFilter::ExtendedKalmanFilter(
         const ExtendedKalmanFilter::MeasurementMatrix & R,
-        const ExtendedKalmanFilter::StateMatrix & Q)
+        const ExtendedKalmanFilter::StateMatrix & Q,
+        const double& magnitude_low_threshold,
+        const double & magnitude_high_threshold)
     : 
     R_(R),
     Q_(Q),
+    magnitude_low_threshold_(magnitude_low_threshold),
+    magnitude_high_threshold_(magnitude_high_threshold),
     first_run_(true)
     {
         P_.setIdentity();
@@ -94,12 +98,9 @@ namespace imu_ekf
 
     void ExtendedKalmanFilter::update(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data)
     {   
-        double accel_norm = std::sqrt(imu_data.accel_x * imu_data.accel_x + 
-                                      imu_data.accel_y * imu_data.accel_y + 
-                                      imu_data.accel_z * imu_data.accel_z);
-
-        if (accel_norm < 0.85 || accel_norm > 1.15) {
-            return; 
+        // Magnitude treshold check
+        if (!magnitude_check(imu_data)) {
+            return;
         }   
 
         // Working on norm gravity vector to be roboust against linear accelerations
@@ -162,11 +163,31 @@ namespace imu_ekf
         return x_;
     }
 
-    void ExtendedKalmanFilter::setR(std::vector<double> R_vector){
+    void ExtendedKalmanFilter::setR(std::vector<double> & R_vector){
         R_ = Eigen::Map<const Eigen::Vector3d>(R_vector.data()).asDiagonal();
     }
 
-    void ExtendedKalmanFilter::setQ(std::vector<double> Q_vector){
+    void ExtendedKalmanFilter::setQ(std::vector<double> & Q_vector){
         Q_ = Eigen::Map<const Eigen::Vector4d>(Q_vector.data()).asDiagonal();
+    }
+
+    bool ExtendedKalmanFilter::magnitude_check(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data){
+        double accel_norm = std::sqrt(imu_data.accel_x * imu_data.accel_x + 
+                                      imu_data.accel_y * imu_data.accel_y + 
+                                      imu_data.accel_z * imu_data.accel_z);
+
+        if (accel_norm < magnitude_low_threshold_ || accel_norm > magnitude_high_threshold_) {
+            return false;
+        } else {
+            return true;
+        }  
+    }
+
+    void ExtendedKalmanFilter::set_magnitude_low_threshold(double & magnitude_low_threshold){
+        magnitude_low_threshold_ = magnitude_low_threshold;
+    }
+
+    void ExtendedKalmanFilter::set_magnitude_high_threshold(double & magnitude_high_threshold){
+        magnitude_high_threshold_ = magnitude_high_threshold;
     }
 } // namespace ekf
