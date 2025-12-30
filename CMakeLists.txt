@@ -15,6 +15,9 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
 
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3 REQUIRED)
+
 # Creating libraries
 add_library(imu_hardware_lib include/imu_sensor_cpp/driver_platform/linuxI2C.cpp)
 add_library(madgwick_filter_lib src/algorithms/madgwick_filter.cpp)
@@ -55,6 +58,7 @@ target_link_libraries(
 ament_target_dependencies(imu_node
   rclcpp
   rclcpp_lifecycle
+  Eigen3
   sensor_msgs)
 
 # Installing package
