@@ -34,7 +34,7 @@ accel_er_count_(0)
     std::vector<double> Q_vector;
     imu_ekf::ExtendedKalmanFilter::MeasurementMatrix R;
     imu_ekf::ExtendedKalmanFilter::StateMatrix Q;
-
+\
     // Complementary filter parameters
     this->declare_parameter<double>("alfa", 0.98);
     this->declare_parameter<double>("magnitude_low_threshold", 0.85); // Used by ekf and comp
@@ -56,6 +56,7 @@ accel_er_count_(0)
     this->get_parameter("alfa", init_comp_config.alpha);
     this->get_parameter("magnitude_low_threshold", init_comp_config.magnitude_low_threshold);
     this->get_parameter("magnitude_high_threshold", init_comp_config.magnitude_high_threshold);
+
     this->get_parameter("gimbal_lock_threshold", init_comp_config.gimbal_lock_threshold);
     this->get_parameter("beta", init_beta);
     this->get_parameter("R", R_vector);
@@ -82,8 +83,10 @@ accel_er_count_(0)
                     complementary_filter_->update_alpha(val);
                 } else if (param.get_name() == "magnitude_low_threshold"){
                     complementary_filter_->update_magnitude_low_threshold(param.as_double());
+                    extended_kalman_filter_->set_magnitude_low_threshold(param.as_double());
                 } else if (param.get_name() == "magnitude_high_threshold"){
                     complementary_filter_->update_magnitude_high_threshold(param.as_double());
+                    extended_kalman_filter_->set_magnitude_high_threshold(param.as_double());
                 } else if (param.get_name() == "gimbal_lock_threshold"){
                     double val = param.as_double();
                     if (val < 0.7 || val > 1.0) {
@@ -165,7 +168,11 @@ accel_er_count_(0)
     R = Eigen::Map<const Eigen::Vector3d>(R_vector.data()).asDiagonal();
     Q = Eigen::Map<const Eigen::Vector4d>(Q_vector.data()).asDiagonal();
     extended_kalman_filter_ = std::make_unique<imu_ekf::ExtendedKalmanFilter>(
-        imu_ekf::ExtendedKalmanFilter(R, Q));
+        imu_ekf::ExtendedKalmanFilter(
+            R,
+            Q,
+            init_comp_config.magnitude_low_threshold,
+            init_comp_config.magnitude_high_threshold));
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn ImuNode::on_configure(

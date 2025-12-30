@@ -115,12 +115,12 @@ namespace imu_ekf
         /**
          * @brief Updates class member magnitude_low_threshold_value.
          */
-        void set_magnitude_low_threshold(double & magnitude_low_threshold);
+        void set_magnitude_low_threshold(double magnitude_low_threshold);
 
         /**
          * @brief Updates class member magnitude_high_threshold_value.
          */
-        void set_magnitude_high_threshold(double & magnitude_high_threshold);
+        void set_magnitude_high_threshold(double magnitude_high_threshold);
 
     private:
 
@@ -161,7 +161,6 @@ namespace imu_ekf
           
         /** Maximum acceptable gravity vector length [g] for correction. */
         double magnitude_high_threshold_;
-        
     };
 }
 #endif 

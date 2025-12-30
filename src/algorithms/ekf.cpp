@@ -14,9 +14,9 @@ namespace imu_ekf
     : 
     R_(R),
     Q_(Q),
+    first_run_(true),
     magnitude_low_threshold_(magnitude_low_threshold),
-    magnitude_high_threshold_(magnitude_high_threshold),
-    first_run_(true)
+    magnitude_high_threshold_(magnitude_high_threshold)
     {
         P_.setIdentity();
         P_ = P_ * 0.001;
@@ -183,11 +183,11 @@ namespace imu_ekf
         }  
     }
 
-    void ExtendedKalmanFilter::set_magnitude_low_threshold(double & magnitude_low_threshold){
+    void ExtendedKalmanFilter::set_magnitude_low_threshold(double magnitude_low_threshold){
         magnitude_low_threshold_ = magnitude_low_threshold;
     }
 
-    void ExtendedKalmanFilter::set_magnitude_high_threshold(double & magnitude_high_threshold){
+    void ExtendedKalmanFilter::set_magnitude_high_threshold(double magnitude_high_threshold){
         magnitude_high_threshold_ = magnitude_high_threshold;
     }
 } // namespace ekf
