@@ -89,7 +89,7 @@ $$
 P_{k|k-1} = F_{k-1} P_{k-1} F_{k-1}^T + Q
 $$
 
-*Where $Q$ is the Process Noise Covariance Matrix (trust in Gyroscope).*
+*Where Q is the Process Noise Covariance Matrix (trust in Gyroscope).*
 
 **Measurement Model (Correction):**
 The predicted orientation is corrected using the Accelerometer data (gravity vector reference). The measurement model $h(x)$ predicts the expected gravity vector based on the current quaternion, and the difference (innovation) updates the state.
@@ -102,7 +102,7 @@ $$
 x_k = x_{k|k-1} + K_k (z_{accel} - h(x_{k|k-1}))
 $$
 
-*Where $R$ is the Measurement Noise Covariance Matrix (trust in Accelerometer) and $K$ is the Kalman Gain.*
+*Where R is the Measurement Noise Covariance Matrix (trust in Accelerometer) and K is the Kalman Gain.*
 
 **Key Features:**
 * **Dynamic Covariance Tuning:** The matrices $Q$ (Process Noise) and $R$ (Measurement Noise) can be reconfigured at runtime via ROS 2 parameters. This allows for precise tuning between "smoothness" (high $R$) and "responsiveness" (low $R$).
