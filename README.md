@@ -35,17 +35,23 @@ $$\theta_{t} = \alpha \cdot (\theta_{t-1} + \omega_{gyro} \cdot \Delta t) + (1 -
 
 **Core Equations:**
 
-**1. Prediction (Gyroscope):** Estimate the new angle based on angular velocity.
+### 1. Prediction (Gyroscope)
+Estimate the new angle based on angular velocity.
+
 $$
 \hat{\theta}_{pred} = \theta_{t-1} + \omega_{gyro} \cdot \Delta t
 $$
 
-**2. Error Calculation:** Determine the difference between the accelerometer measurement and the prediction.
+### 2. Error Calculation
+Determine the difference between the accelerometer measurement and the prediction.
+
 $$
 e = \theta_{accel} - \hat{\theta}_{pred}
 $$
 
-**3. Correction:** Apply a fraction of the error to correct the drift.
+### 3. Correction
+Apply a fraction of the error to correct the drift.
+
 $$
 \theta_{t} = \hat{\theta}_{pred} + (1 - \alpha) \cdot e
 $$
