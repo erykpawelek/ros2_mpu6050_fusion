@@ -52,11 +52,13 @@ accel_er_count_(0)
     // MPU6050 calibration parameters
     this->declare_parameter<bool>("start_calibration", false);
     this->declare_parameter<bool>("delete_calibration_data", false);
+    // Gyroscope deadzone range
+    this->declare_parameter<double>("gyro_deadzone", 0.02);
+
 
     this->get_parameter("alfa", init_comp_config.alpha);
     this->get_parameter("magnitude_low_threshold", init_comp_config.magnitude_low_threshold);
     this->get_parameter("magnitude_high_threshold", init_comp_config.magnitude_high_threshold);
-
     this->get_parameter("gimbal_lock_threshold", init_comp_config.gimbal_lock_threshold);
     this->get_parameter("beta", init_beta);
     this->get_parameter("R", R_vector);
@@ -64,6 +66,8 @@ accel_er_count_(0)
     this->get_parameter("mode", mode_);
     this->get_parameter("frame_id", frame_id_);
     this->get_parameter("delete_calibration_data", delete_calibration_data_);
+    this->get_parameter("gyro_deadzone", gyro_deadzone_);
+
 
     // On set parameters callback handle
     param_callback_handle_ = this->add_on_set_parameters_callback(
@@ -142,13 +146,19 @@ accel_er_count_(0)
                         }
                     }
                 } else if (param.get_name() == "delete_calibration_data"){
-                        if (param.as_bool() == true){
+                    if (param.as_bool() == true){
                         if (this->get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE){
-                            RCLCPP_WARN(this->get_logger(), "Calibration started...");
-                            imu_driver_->delete_calibration_data();
-                            RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
+                        RCLCPP_WARN(this->get_logger(), "Calibration started...");
+                        imu_driver_->delete_calibration_data();
+                        RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
                         }
                     }
+                } else if (param.get_name() == "gyro_deadzone"){
+                    double val = param.as_double();
+                    if (val > 0.06){
+                        RCLCPP_WARN(this->get_logger(), "Gyroscope dead zone range is relativly high");
+                    }
+                    gyro_deadzone_ = val; 
                 }
             }
             return result;
@@ -271,10 +281,15 @@ void ImuNode::publisher_callback()
                 this->get_logger(),
                 *this->get_clock(),
                 1000,
-                "\nAccelerations\nx: %.2f g\ty: %.2f g\tz: %.2f g\nAngilar velocities\nx: %.2f rad/s\ty: %.2f rad/s\tz: %.2f rad/s",
+                "\nAccelerations\nx: %.2f g\ty: %.2f g\tz: %.2f g\nAngular velocities\nx: %.2f rad/s\ty: %.2f rad/s\tz: %.2f rad/s",
                 imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
                 imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
 
+            // Gyroscope dead zone for drift reduction
+            if (std::abs(imu_data.gyro_x) < gyro_deadzone_) imu_data.gyro_x = 0.0;
+            if (std::abs(imu_data.gyro_y) < gyro_deadzone_) imu_data.gyro_y = 0.0;
+            if (std::abs(imu_data.gyro_z) < gyro_deadzone_) imu_data.gyro_z = 0.0;
+                
             // State machine
             if (mode_ == "comp"){
                 complementary_filter_->update(imu_data, dt.seconds());

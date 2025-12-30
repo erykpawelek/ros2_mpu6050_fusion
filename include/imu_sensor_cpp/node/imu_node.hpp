@@ -112,6 +112,8 @@ namespace imu_sensor_cpp
         bool delete_calibration_data_;
         /**Operating filter mode*/
         std::string mode_;
+        /**Gyroscope dead zone range range: (0, +-gyro_deadzone) */
+        double gyro_deadzone_;
     };
 }
 #endif //IMU_SENSOR_NODE_HPP
