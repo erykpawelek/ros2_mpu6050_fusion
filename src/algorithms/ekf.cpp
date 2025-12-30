@@ -22,7 +22,7 @@ namespace imu_ekf
         P_ = P_ * 0.001;
     }
 
-    void ExtendedKalmanFilter::init(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data)
+    void ExtendedKalmanFilter::initialize_if_needed(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data)
     {
         if (first_run_){
             // Calculating initial state prediction

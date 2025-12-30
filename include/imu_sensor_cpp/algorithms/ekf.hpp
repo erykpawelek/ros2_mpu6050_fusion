@@ -63,7 +63,7 @@ namespace imu_ekf
         * Yaw is initialized to 0.0.
         * @param imu_data Structure containing raw IMU data (accelerometer).
         */
-        void init(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data);
+        void initialize_if_needed(const mpu6050cust_driver::MPU6050CustomDriver<mpu6050cust_driver::LinuxI2C>::ImuData & imu_data);
 
         /**
          * @brief Calculates state prediction along with prediction covariance matrix P_.

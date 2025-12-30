@@ -36,7 +36,7 @@ accel_er_count_(0)
     imu_ekf::ExtendedKalmanFilter::StateMatrix Q;
 \
     // Complementary filter parameters
-    this->declare_parameter<double>("alfa", 0.98);
+    this->declare_parameter<double>("alpha", 0.98);
     this->declare_parameter<double>("magnitude_low_threshold", 0.85); // Used by ekf and comp
     this->declare_parameter<double>("magnitude_high_threshold", 1.15);// Used by ekf and comp
     this->declare_parameter<double>("gimbal_lock_threshold", 0.97);
@@ -44,7 +44,7 @@ accel_er_count_(0)
     this->declare_parameter<double>("beta", 0.1);
     // EKF filter parameters
     this->declare_parameter<std::vector<double>>("R", std::vector<double>{6.0, 6.0, 6.0});
-    this->declare_parameter<std::vector<double>>("Q", std::vector<double>{0.01, 0.01, 0.01, 0.01});
+    this->declare_parameter<std::vector<double>>("Q", std::vector<double>{0.008, 0.008, 0.008, 0.008});
     // State machine parameter
     this->declare_parameter<std::string>("mode", "ekf");
     // Publisher parameters
@@ -56,7 +56,7 @@ accel_er_count_(0)
     this->declare_parameter<double>("gyro_deadzone", 0.02);
 
 
-    this->get_parameter("alfa", init_comp_config.alpha);
+    this->get_parameter("alpha", init_comp_config.alpha);
     this->get_parameter("magnitude_low_threshold", init_comp_config.magnitude_low_threshold);
     this->get_parameter("magnitude_high_threshold", init_comp_config.magnitude_high_threshold);
     this->get_parameter("gimbal_lock_threshold", init_comp_config.gimbal_lock_threshold);
@@ -77,11 +77,11 @@ accel_er_count_(0)
             result.successful = true;
 
             for (const auto & param : parameters){
-                if (param.get_name() == "alfa"){
+                if (param.get_name() == "alpha"){
                     double val = param.as_double();
                     if (val < 0.0 || val > 1.0) {
                         result.successful = false;
-                        result.reason = "Alfa must be between 0.0 and 1.0";
+                        result.reason = "Alpha must be between 0.0 and 1.0";
                         return result; 
                     }
                     complementary_filter_->update_alpha(val);
@@ -148,9 +148,8 @@ accel_er_count_(0)
                 } else if (param.get_name() == "delete_calibration_data"){
                     if (param.as_bool() == true){
                         if (this->get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE){
-                        RCLCPP_WARN(this->get_logger(), "Calibration started...");
+                        RCLCPP_WARN(this->get_logger(), "Calibration data deleted");
                         imu_driver_->delete_calibration_data();
-                        RCLCPP_INFO(this->get_logger(), "Calibration DONE.");
                         }
                     }
                 } else if (param.get_name() == "gyro_deadzone"){
@@ -315,7 +314,7 @@ void ImuNode::publisher_callback()
                     publish_data = false;
                 }
             } else if (mode_ == "ekf"){
-                extended_kalman_filter_->init(imu_data);
+                extended_kalman_filter_->initialize_if_needed(imu_data);
                 extended_kalman_filter_->predict(imu_data, dt.seconds());
                 extended_kalman_filter_->update(imu_data);
                 auto q = extended_kalman_filter_->get_state();
