@@ -53,7 +53,7 @@ namespace imu_ekf
         // Angular velocity quaternion
         Eigen::Quaterniond q_omega(0.0, imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
 
-        // Quaternion derivative based ona angular velocity
+        // Quaternion derivative based ona angular velocity (1/2 component is transfered to integration step line:63)
         Eigen::Quaterniond q_dot = q_prev * q_omega;
         
         // New quaternion prediction

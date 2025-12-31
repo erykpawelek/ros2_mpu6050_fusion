@@ -53,9 +53,9 @@ namespace imu_madgwick
              
             // Gradient normalizing to guarantee that it's magnitude is 1.0
             double grad_norm = std::sqrt(grad_w * grad_w +
-                                        grad_x * grad_x + 
-                                        grad_y * grad_y +
-                                        grad_z * grad_z);
+                                         grad_x * grad_x + 
+                                         grad_y * grad_y +
+                                         grad_z * grad_z);
                                         
             if (grad_norm > EPSILON){
                 norm_grad_w = grad_w / grad_norm;

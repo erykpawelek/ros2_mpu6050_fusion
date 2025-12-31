@@ -18,7 +18,7 @@ namespace mpu6050cust_driver
     template <typename I2C_Interface>
 
     /**
-     * @brief MPU6050 driver class.
+     * @brief MPU6050 driver template class.
      */
     class MPU6050CustomDriver
     {
@@ -42,13 +42,13 @@ namespace mpu6050cust_driver
         /**Gyroscope range +-2000 deg register preset */
         static constexpr uint8_t GYRO_RANGE_2000 = 0b00011000;
 
-        /**Accelerometer range +-2 deg register preset */
+        /**Accelerometer range +-2 g register preset */
         static constexpr uint8_t ACCEL_RANGE_2 = 0b00000000;
-        /**Accelerometer range +-4 deg register preset */
+        /**Accelerometer range +-4 g register preset */
         static constexpr uint8_t ACCEL_RANGE_4 = 0b00001000;
-        /**Accelerometer range +-8 deg register preset */
+        /**Accelerometer range +-8 g register preset */
         static constexpr uint8_t ACCEL_RANGE_8 = 0b00010000;
-        /**Accelerometer range +-16 deg register preset */
+        /**Accelerometer range +-16 g register preset */
         static constexpr uint8_t ACCEL_RANGE_16 = 0b00011000;
         /**PI const */
         static constexpr float PI = 3.1415926535;
@@ -57,6 +57,7 @@ namespace mpu6050cust_driver
         float accel_sensitivity_;
         /** Gyroscope data sensitivity */
         float gyro_sensitivity_;
+
         /** Data struct containing accelerometer, gyroscope and temperature data */
         struct ImuData {
             float accel_x;
@@ -434,7 +435,7 @@ namespace mpu6050cust_driver
             int16_t gyro_register_y = (static_cast<int16_t>(data[10]) << 8 | static_cast<int16_t>(data[11]));
             int16_t gyro_register_z = (static_cast<int16_t>(data[12]) << 8 | static_cast<int16_t>(data[13]));
 
-            // Recalculeting data to get right metrics
+            // Recalculating data to get right metrics
             data_struct.accel_x = (static_cast<float>(accel_register_x) / accel_sensitivity_) - offset_accel_x_;
             data_struct.accel_y = (static_cast<float>(accel_register_y) / accel_sensitivity_) - offset_accel_y_;
             data_struct.accel_z = (static_cast<float>(accel_register_z) / accel_sensitivity_) - offset_accel_z_;
