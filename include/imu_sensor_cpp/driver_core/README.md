@@ -13,14 +13,13 @@ Designed for portability across Linux (SMBus), STM32 (HAL), ESP32, and other emb
 
 ## Offline Testing (Mocking)
 
-This driver is designed with dependency injection, allowing logic verification without physical hardware.
-A mock test script is provided in `test/mock_test.cpp`.
+This project includes a set of unit tests (Mock Tests) designed to verify the driver logic and algorithms without requiring physical hardware (Raspberry Pi / IMU). These tests check initialization, data reading, and error handling for the I2C communication.
 
-To run the test:
-1. Navigate to the package root.
-2. Compile and run using g++:
-   ```bash
-   g++ test/mock_test.cpp -I include -o run_tests && ./run_tests
+To run the tests and view detailed results directly in the console, use the following command:
+
+```bash
+colcon test --packages-select imu_sensor_cpp --event-handlers console_direct+
+```
 
 ## How to use (Porting Guide)
 

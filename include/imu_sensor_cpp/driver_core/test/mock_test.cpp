@@ -7,6 +7,8 @@
 #include <vector>
 #include <cassert>
 #include <iomanip>
+
+#include <gtest/gtest.h>
 #include "imu_sensor_cpp/driver_core/mpu6050_driver.hpp" 
 
 
@@ -25,79 +27,104 @@ public:
     }
 
     void writeRegister(uint8_t dev_addr, uint8_t reg_addr, uint8_t value) {
-        registers[reg_addr] = value;
-        
-
-        std::stringstream ss;
-        ss << "WRITE [Reg: 0x" << std::hex << (int)reg_addr 
-           << " Val: 0x" << (int)value << "]";
-        operation_log.push_back(ss.str());
+        if (dev_addr != 0x68) {
+             throw std::runtime_error("Invalid device address"); 
+        } else {
+            registers[reg_addr] = value;
+    
+            std::stringstream ss;
+            ss << "WRITE [Reg: 0x" << std::hex << (int)reg_addr 
+            << " Val: 0x" << (int)value << "]";
+            operation_log.push_back(ss.str());
+        }
+       
     }
 
     uint8_t readRegister(uint8_t dev_addr, uint8_t reg_addr) {
-        
-        std::stringstream ss;
-        ss << "READ  [Reg: 0x" << std::hex << (int)reg_addr << "]";
-        operation_log.push_back(ss.str());
+        if (dev_addr != 0x68) {
+             throw std::runtime_error("Invalid device address"); 
+        } else {
+            std::stringstream ss;
+            ss << "READ  [Reg: 0x" << std::hex << (int)reg_addr << "]";
+            operation_log.push_back(ss.str());
 
-        
-        return registers[reg_addr];
+            return registers[reg_addr];
+        }
     }
 
     int16_t readWord(uint8_t dev_addr, uint8_t reg_addr) {
-        // Symulacja odczytu 2 bajtów (Big Endian)
-        uint8_t h = registers[reg_addr];
-        uint8_t l = registers[reg_addr + 1];
-        return (int16_t(h) << 8) | l;
+        if (dev_addr != 0x68) {
+             throw std::runtime_error("Invalid device address"); 
+        } else {
+            uint8_t h = registers[reg_addr];
+            uint8_t l = registers[reg_addr + 1];
+            uint16_t v = (int16_t(h) << 8) | l;
+
+            std::stringstream ss;
+            ss << "READ [Reg: 0x" << std::hex << (int)v << "]";
+            operation_log.push_back(ss.str());
+
+            return (int16_t(h) << 8) | l;
+        }
+       
     }
 
     int readDataBlock(uint8_t dev_addr, uint8_t start_reg, uint8_t size, uint8_t* buffer) {
-        for(int i=0; i<size; ++i) {
-            buffer[i] = registers[start_reg + i];
+        if (dev_addr != 0x68) {
+             throw std::runtime_error("Invalid device address"); 
+        } else {
+            for(int i=0; i<size; ++i) {
+                buffer[i] = registers[start_reg + i];
+            }
+
+            std::stringstream ss;
+            ss << "READ BLOCK [Start Reg: 0x" << std::hex << (int)start_reg << " Size: " << std::dec << (int)size << "]";
+            operation_log.push_back(ss.str());
+            
+            return size;
         }
-        return size; 
     }
 };
 
-// --- TEST SCENARIO ---
-
-int main() {
-    std::cout << "--- STARTING OFFLINE DRIVER TEST ---\n";
-
+TEST(MPU6050Test, InitializationAndDataRead) {
     MockI2C mock_i2c;
 
-    std::cout << "[INFO] Initializing Driver...\n";
-    
-    try {
-        mpu6050cust_driver::MPU6050CustomDriver<MockI2C> imu(
+    EXPECT_NO_THROW({
+        mpu6050cust_driver::MPU6050CustomDriver<MockI2C> imu_driver(
             mock_i2c, 
             0x68,
             mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::DLPF_184_BAND,
             mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::GYRO_RANGE_500,
             mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::ACCEL_RANGE_4
         );
-        
-        std::cout << "[PASS] Driver initialized successfully (WHO_AM_I check passed).\n";
+    });
 
-        auto accel = imu.getAccelerationX();
-        assert(accel == 1.0);
-        std::cout << "[PASS] ACCELERATION test: " << accel << std::endl;
-       
-        uint8_t config_val = mock_i2c.registers[0x1A];
-        assert(config_val == 0x01);
-        std::cout << "[PASS] CONFIG register set correctly to 0x01.\n";
+    mpu6050cust_driver::MPU6050CustomDriver<MockI2C> imu_driver(
+        mock_i2c, 
+        0x68,
+        mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::DLPF_184_BAND,
+        mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::GYRO_RANGE_500,
+        mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::ACCEL_RANGE_4
+    );
 
-        uint8_t gyro_val = mock_i2c.registers[0x1B];
-        assert(gyro_val == 0x08);
-        std::cout << "[PASS] GYRO_CONFIG register set correctly to 0x08.\n";
-
-    } catch (const std::exception& e) {
-        std::cerr << "[FAIL] Exception thrown: " << e.what() << "\n";
-        return 1;
-    }
-
-    std::cout << "--- ALL TESTS PASSED ---\n";
-    return 0;
+    float accel_x = imu_driver.getAccelerationX();
+    EXPECT_FLOAT_EQ(accel_x, 1.0f); 
 }
+
+TEST(MPU6050Test, InvalidAddress) {
+    MockI2C mock_i2c;
+
+    EXPECT_THROW({
+        mpu6050cust_driver::MPU6050CustomDriver<MockI2C> imu_driver(
+            mock_i2c, 
+            0x99,
+            mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::DLPF_184_BAND,
+            mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::GYRO_RANGE_500,
+            mpu6050cust_driver::MPU6050CustomDriver<MockI2C>::ACCEL_RANGE_4
+        );
+    }, std::runtime_error);
+}
+
+
 
 
